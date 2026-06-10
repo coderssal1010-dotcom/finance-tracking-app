@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Circular Shield Vault Frame -->
+    <path
+        android:pathData="M54,24 A30,30 0 1,1 53.999,24 Z"
+        android:strokeColor="#34D399"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <!-- Diagonal Spoke Pins -->
+    <path
+        android:pathData="M54,12 L54,22 M54,86 L54,96 M12,54 L22,54 M86,54 L96,54"
+        android:strokeColor="#10B981"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"/>
+    <!-- Central Dollar Grid Symbol -->
+    <path
+        android:pathData="M54,34 L54,74 M46,42 C46,38 62,38 62,46 C62,54 46,50 46,58 C46,66 62,66 62,62"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+</vector>

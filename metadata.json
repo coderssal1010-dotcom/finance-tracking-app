@@ -1,0 +1,6 @@
+{
+  "name": "Finance Tracker",
+  "description": "Secure offline-first personal finance tracker with automated categorization, budget insights, recurring reminders, and secure locks.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
