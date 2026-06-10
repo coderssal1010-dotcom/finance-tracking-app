@@ -12,42 +12,41 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = MintPrimary, // D0BCFF
-    secondary = MintSecondary, // B2F2BB
-    tertiary = MintTertiary, // 381E72
-    background = DarkBackground, // 1C1B1F
-    surface = DarkCardBackground, // 2B2930
-    onPrimary = Color(0xFF381E72), // Deep purple body text
-    onSecondary = Color(0xFF1E3A24), // Deep forest text
-    onBackground = Color(0xFFE6E1E5), // Soft white
-    onSurface = Color(0xFFE6E1E5), // Soft white
-    surfaceVariant = Color(0xFF49454F), // Slate border
-    outline = Color(0xFF49454F),
-    primaryContainer = Color(0xFF381E72), // Budget card container color
-    onPrimaryContainer = Color(0xFFEADDFF) // Budget card container text
+    primary = SavannahGold,
+    secondary = ForestGreen,
+    tertiary = Terracotta,
+    background = SavannahDarkBg,
+    surface = SavannahCardDark,
+    onPrimary = Color.Black,
+    onSecondary = Color.White,
+    onBackground = Color(0xFFE2EBE5),
+    onSurface = Color(0xFFE2EBE5),
+    surfaceVariant = Color(0xFF23322C),
+    outline = Color(0xFF3B4E45),
+    primaryContainer = Color(0xFF2E4037),
+    onPrimaryContainer = SavannahGold
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF6750A4),
-    secondary = Color(0xFF625B71),
-    tertiary = Color(0xFF7D5260),
-    background = SlateBackgroundLight,
-    surface = CardBackgroundLight,
+    primary = ForestGreen,
+    secondary = SavannahGold,
+    tertiary = Terracotta,
+    background = SavannahCreamBg,
+    surface = SavannahCardLight,
     onPrimary = Color.White,
-    onSecondary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    surfaceVariant = Color(0xFFE7E0EC),
-    outline = Color(0xFF79747E),
-    primaryContainer = Color(0xFFEADDFF),
-    onPrimaryContainer = Color(0xFF21005D)
+    onSecondary = Color.Black,
+    onBackground = Color(0xFF1B2621),
+    onSurface = Color(0xFF1B2621),
+    surfaceVariant = Color(0xFFECE4D6),
+    outline = Color(0xFF8B8273),
+    primaryContainer = Color(0xFFE2EBE5),
+    onPrimaryContainer = ForestGreen
 )
 
 @Composable
 fun MyApplicationTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = false, // Use our tailored branding color scheme by default
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val colorScheme = when {

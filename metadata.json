@@ -1,6 +1,6 @@
 {
-  "name": "Finance Tracker",
-  "description": "Secure offline-first personal finance tracker with automated categorization, budget insights, recurring reminders, and secure locks.",
+  "name": "Jmarket",
+  "description": "Ghanaian P2P buying & selling marketplace supporting Mobile Money (MoMo) and Bank Cards. Direct seller sign-up, offline chat, and search.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

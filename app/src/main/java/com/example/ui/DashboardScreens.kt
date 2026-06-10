@@ -1,38 +1,31 @@
 package com.example.ui
 
-import android.content.Context
 import android.content.Intent
-import java.text.SimpleDateFormat
-import java.text.NumberFormat
-import java.util.Date
-import java.util.Locale
-import java.util.Calendar
+import android.net.Uri
 import androidx.compose.animation.*
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -44,1713 +37,1818 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.example.data.CustomCategory
-import com.example.data.RecurringReminder
-import com.example.data.Transaction
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.*
 import com.example.ui.theme.*
+import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
 fun MainFinanceApp(viewModel: FinanceViewModel) {
-    val isLocked by viewModel.isAppLocked.collectAsState()
-    
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        if (isLocked) {
-            PINLockScreen(viewModel)
-        } else {
-            FinanceWorkspace(viewModel)
-        }
-    }
-}
+    val currentTab by viewModel.currentTab.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
+    val activePaymentProduct by viewModel.activePaymentProduct.collectAsStateWithLifecycle()
 
-// --- SECURE PIN KEYBOARD LOCK OVERLAY ---
-@Composable
-fun PINLockScreen(viewModel: FinanceViewModel) {
-    val pinBuffer by viewModel.pinBuffer.collectAsState()
-    val securityMsg by viewModel.securityMessage.collectAsState()
-    
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(DarkBackground) // Lockscreen is always high privacy dark
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
-        // App Logo Icon and Title
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(top = 40.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(MintPrimary, MintTertiary)))
-                    .drawBehind {
-                        // Drawing decorative vaults grid
-                        drawCircle(Color.White.copy(alpha = 0.15f), radius = 60f, center = Offset(40f, 40f))
-                    },
-                contentAlignment = Alignment.Center
+    Scaffold(
+        bottomBar = {
+            NavigationBar(
+                modifier = Modifier.navigationBarsPadding(),
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                tonalElevation = 8.dp
             ) {
-                Icon(
-                    imageVector = Icons.Default.Lock,
-                    contentDescription = "Security Active",
-                    tint = DarkBackground,
-                    modifier = Modifier.size(40.dp)
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "APEX PRIVACY LOCK",
-                color = MintPrimary,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp
-            )
-            Text(
-                text = "Cryptographic biometric & pin sandbox",
-                color = Color.Gray,
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 24.dp)
-            )
-        }
-
-        // Selected PIN display
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                for (i in 0 until 4) {
-                    val active = i < pinBuffer.length
-                    Box(
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clip(CircleShape)
-                            .border(2.dp, MintPrimary, CircleShape)
-                            .background(if (active) MintPrimary else Color.Transparent)
+                listOf(
+                    Triple("Browse", Icons.Default.Home, "Market"),
+                    Triple("Chat", Icons.Default.Email, "Negotiate"),
+                    Triple("Sell", Icons.Default.Add, "Sell Item"),
+                    Triple("Receipts", Icons.Default.ShoppingCart, "Receipts"),
+                    Triple("Profile", Icons.Default.Person, "My Hub")
+                ).forEach { (tab, icon, label) ->
+                    val isSelected = currentTab == tab
+                    NavigationBarItem(
+                        selected = isSelected,
+                        onClick = { viewModel.selectTab(tab) },
+                        icon = {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = label,
+                                tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        label = { Text(label, fontSize = 11.sp) },
+                        modifier = Modifier.testTag("nav_tab_$tab")
                     )
                 }
-            }
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            Text(
-                text = securityMsg.ifEmpty { "Enter your 4-digit security PIN to unlock" },
-                color = if (securityMsg.contains("Incorrect", ignoreCase = true)) ExpenseColor else Color.White,
-                fontSize = 14.sp,
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 24.dp)
-            )
-        }
-
-        // Custom Numeric Keyboard Dial Matrix
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            val rows = listOf(
-                listOf("1", "2", "3"),
-                listOf("4", "5", "6"),
-                listOf("7", "8", "9"),
-                listOf("C", "0", "⌫")
-            )
-            
-            for (row in rows) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    for (key in row) {
-                        Button(
-                            onClick = { viewModel.handlePINKey(key) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(56.dp)
-                                .testTag("pin_key_$key"),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (key == "C" || key == "⌫") Color.White.copy(0.04f) else Color.White.copy(0.08f),
-                                contentColor = if (key == "C") ExpenseColor else if (key == "⌫") MintPrimary else Color.White
-                            )
-                        ) {
-                            Text(
-                                text = key,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// --- WORKSPACE AFTER PIN CODE VALIDATION ---
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun FinanceWorkspace(viewModel: FinanceViewModel) {
-    val currentTab by viewModel.currentTab.collectAsState()
-    val context = LocalContext.current
-    
-    // Quick notification banners
-    val securityMsg by viewModel.securityMessage.collectAsState()
-    val isBankSyncing by viewModel.isBankSyncing.collectAsState()
-    val isCloudSyncing by viewModel.isCloudSyncing.collectAsState()
-    
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "V",
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp
-                            )
-                        }
-                        Column {
-                            Text(
-                                text = "Vault",
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 16.sp,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFFB2F2BB))
-                                )
-                                Text(
-                                    text = "SECURE SYNC ACTIVE",
-                                    fontSize = 9.sp,
-                                    color = Color(0xFFC9C5D0),
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.5.sp
-                                )
-                            }
-                        }
-                    }
-                },
-                actions = {
-                    // Sync Badges & Quick CSV Exporter
-                    if (isBankSyncing || isCloudSyncing) {
-                        CircularProgressIndicator(
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                    }
-                    
-                    IconButton(
-                        onClick = {
-                            val uri = viewModel.exportToCSV(context)
-                            if (uri != null) {
-                                val intent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/csv"
-                                    putExtra(Intent.EXTRA_STREAM, uri)
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                }
-                                context.startActivity(Intent.createChooser(intent, "Share CSV Financial Report"))
-                            }
-                        },
-                        modifier = Modifier
-                            .testTag("export_csv_btn")
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "Export CSV Data",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    IconButton(
-                        onClick = { viewModel.lockApp() },
-                        modifier = Modifier
-                            .testTag("lock_app_btn")
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Lock,
-                            contentDescription = "Lock Device Securely",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        },
-        bottomBar = {
-            val navItemColors = NavigationBarItemDefaults.colors(
-                selectedIconColor = Color(0xFF21005D),
-                selectedTextColor = MaterialTheme.colorScheme.onBackground,
-                indicatorColor = Color(0xFFEADDFF),
-                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 8.dp,
-                modifier = Modifier.border(
-                    width = 0.5.dp, 
-                    color = MaterialTheme.colorScheme.surfaceVariant, 
-                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-                )
-            ) {
-                NavigationBarItem(
-                    selected = currentTab == "Dashboard",
-                    onClick = { viewModel.selectTab("Dashboard") },
-                    icon = { Icon(Icons.Default.Home, "Overview") },
-                    label = { Text("Dash", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
-                    colors = navItemColors,
-                    modifier = Modifier.testTag("tab_dashboard")
-                )
-                NavigationBarItem(
-                    selected = currentTab == "Transactions",
-                    onClick = { viewModel.selectTab("Transactions") },
-                    icon = { Icon(Icons.Default.List, "Ledger") },
-                    label = { Text("Ledger", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
-                    colors = navItemColors,
-                    modifier = Modifier.testTag("tab_transactions")
-                )
-                NavigationBarItem(
-                    selected = currentTab == "Reminders",
-                    onClick = { viewModel.selectTab("Reminders") },
-                    icon = { Icon(Icons.Default.Refresh, "Reminders") },
-                    label = { Text("Reminders", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
-                    colors = navItemColors,
-                    modifier = Modifier.testTag("tab_reminders")
-                )
-                NavigationBarItem(
-                    selected = currentTab == "Security",
-                    onClick = { viewModel.selectTab("Security") },
-                    icon = { Icon(Icons.Default.Lock, "Settings") },
-                    label = { Text("Security", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
-                    colors = navItemColors,
-                    modifier = Modifier.testTag("tab_security")
-                )
             }
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .background(MaterialTheme.colorScheme.background)
         ) {
-            // Success/Notification Toast Banner
-            if (securityMsg.isNotEmpty()) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { viewModel.handlePINKey("C") } // custom clear banner
-                ) {
-                    Text(
-                        text = securityMsg,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(vertical = 10.dp, horizontal = 16.dp)
-                    )
-                }
+            when (currentTab) {
+                "Browse" -> BrowseMarketScreen(viewModel)
+                "Chat" -> ChatNegotiateScreen(viewModel)
+                "Sell" -> SellItemScreen(viewModel)
+                "Receipts" -> ReceiptsScreen(viewModel)
+                "Profile" -> ProfileHubScreen(viewModel)
             }
 
-            AnimatedContent(
-                targetState = currentTab,
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(220)) togetherWith fadeOut(animationSpec = tween(220))
-                },
-                label = "TabTransitions"
-            ) { targetTab ->
-                when (targetTab) {
-                    "Dashboard" -> DashboardScreen(viewModel)
-                    "Transactions" -> TransactionsScreen(viewModel)
-                    "Reminders" -> RemindersScreen(viewModel)
-                    "Security" -> SecurityScreen(viewModel)
-                }
+            activePaymentProduct?.let { product ->
+                PaymentCheckoutDialog(
+                    product = product,
+                    viewModel = viewModel,
+                    onDismiss = { viewModel.cancelCheckout() }
+                )
             }
         }
     }
 }
 
-// ==================== SCREEN 1: DASHBOARD OVERVIEW ====================
+// ============================================
+// BROWSE MARKET SCREEN
+// ============================================
 @Composable
-fun DashboardScreen(viewModel: FinanceViewModel) {
-    val transactionList by viewModel.transactions.collectAsState()
-    val accountsList by viewModel.linkedAccounts.collectAsState()
-    val categoriesList by viewModel.categories.collectAsState()
-    val isBankSyncing by viewModel.isBankSyncing.collectAsState()
-    val billsList by viewModel.bills.collectAsState()
-    
-    // Derive summary details
-    val totalIncome = transactionList.filter { it.amount > 0 }.sumOf { it.amount }
-    val totalExpense = transactionList.filter { it.amount < 0 }.sumOf { it.amount }
-    val netCashFlow = totalIncome + totalExpense
-    
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
-    ) {
-        
-        // Active automated reminder system for unpaid bills approaching due date
-        val unpaidBills = billsList.filter { !it.isPaid }
-        val now = System.currentTimeMillis()
-        val dueSoonBills = unpaidBills.filter { bill ->
-            val daysLeft = ((bill.dueDate - now) / (24 * 3600 * 1000L)).toInt()
-            daysLeft in 0..bill.reminderDaysBefore
-        }
-        val overdueBills = unpaidBills.filter { bill -> bill.dueDate < now && ((now - bill.dueDate) / (24 * 3600 * 1000L)).toInt() >= 1 }
+fun BrowseMarketScreen(viewModel: FinanceViewModel) {
+    val products by viewModel.products.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
+    val selectedLocation by viewModel.selectedLocation.collectAsStateWithLifecycle()
+    val selectedProduct by viewModel.selectedProduct.collectAsStateWithLifecycle()
 
-        if (dueSoonBills.isNotEmpty() || overdueBills.isNotEmpty()) {
-            item {
-                Card(
+    val categories = listOf("All", "Yam & Produce", "Electronics & Phones", "Fashion & Apparel", "Local Crafts & Cosmetics", "Home & Appliances")
+    val locations = listOf("All", "Salaga, Savannah", "Accra, Greater Accra", "Kumasi, Ashanti", "Tamale, Northern")
+
+    val maxProductPrice = remember(products) {
+        val maxInList = products.maxOfOrNull { it.price } ?: 2000.0
+        (Math.ceil(maxInList / 100.0) * 100.0).coerceAtLeast(2000.0).toFloat()
+    }
+
+    var priceRange by remember(maxProductPrice) { mutableStateOf(0f..maxProductPrice) }
+
+    AnimatedContent(targetState = selectedProduct, label = "ProductTransition") { product ->
+        if (product != null) {
+            ProductDetailView(product = product, viewModel = viewModel, onBack = { viewModel.selectProduct(null) })
+        } else {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .border(1.dp, ExpenseColor.copy(alpha = 0.4f), RoundedCornerShape(16.dp)),
-                    colors = CardDefaults.cardColors(
-                        containerColor = ExpenseColor.copy(alpha = 0.08f)
-                    )
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(ForestGreen, ForestGreen.copy(alpha = 0.85f))
+                            )
+                        )
+                        .padding(horizontal = 20.dp, vertical = 24.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(ExpenseColor.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Notifications,
-                                contentDescription = "Dues Alert",
-                                tint = ExpenseColor,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.width(10.dp))
-                        
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (overdueBills.isNotEmpty()) "Bill Payment Overdue!" else "Upcoming Bill Reminders",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            val descText = when {
-                                overdueBills.isNotEmpty() && dueSoonBills.isNotEmpty() -> 
-                                    "${overdueBills.size} bills overdue, ${dueSoonBills.size} due soon."
-                                overdueBills.isNotEmpty() -> 
-                                    "${overdueBills.first().payee} (${formatCurrency(overdueBills.first().amount)}) was due on ${SimpleDateFormat("MMM d", Locale.US).format(Date(overdueBills.first().dueDate))}."
-                                else -> 
-                                    "${dueSoonBills.first().payee} (${formatCurrency(dueSoonBills.first().amount)}) is due in ${((dueSoonBills.first().dueDate - now) / (24 * 3600 * 1000L)).toInt()} days."
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                JmarketLogo(modifier = Modifier.size(28.dp))
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "Jmarket",
+                                    color = SavannahGold,
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.testTag("app_header_title")
+                                )
                             }
-                            Text(
-                                text = descText,
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f)
-                            )
+                            Badge(
+                                containerColor = SavannahGold,
+                                contentColor = Color.Black,
+                                modifier = Modifier.padding(2.dp)
+                            ) {
+                                Text("Ghana P2P", fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                            }
                         }
-                        
-                        TextButton(
-                            onClick = { viewModel.selectTab("Reminders") }
-                        ) {
-                            Text(
-                                text = "View",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
+
+                        Text(
+                            text = "Buy & sell directly around Ghanaian cities and all major regions",
+                            color = Color(0xFFDCE6DF),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { viewModel.updateSearchQuery(it) },
+                            placeholder = { Text("Search yams, shea butter, electronics...", fontSize = 14.sp) },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search icon") },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Clear text")
+                                    }
+                                }
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = Color.White,
+                                unfocusedContainerColor = Color.White,
+                                focusedBorderColor = SavannahGold,
+                                unfocusedBorderColor = Color.Transparent,
+                                focusedTextColor = Color.Black,
+                                unfocusedTextColor = Color.Black,
+                                focusedPlaceholderColor = Color.Gray,
+                                unfocusedPlaceholderColor = Color.Gray
+                            ),
+                            shape = RoundedCornerShape(24.dp),
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp)
+                                .testTag("search_bar_input")
+                        )
                     }
                 }
-            }
-        }
-        
-        // Dynamic Quick Card Balance Details / Polish Vault Card
-        item {
-            val linked = accountsList.filter { it.isLinked }
-            val trendPct = if (totalIncome > 0.0) {
-                String.format(Locale.US, "%+.1f%%", (netCashFlow / totalIncome) * 100)
-            } else {
-                "+0.0%"
-            }
 
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(28.dp)),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
-                    Text(
-                        text = "Total Balance",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                        fontWeight = FontWeight.Medium
-                    )
-
+                    Text("Select Category", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                     Row(
-                        verticalAlignment = Alignment.Bottom,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = formatCurrency(netCashFlow),
-                            fontSize = 36.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            letterSpacing = (-1).sp
-                        )
-                        
-                        Box(
-                            modifier = Modifier
-                                .padding(bottom = 6.dp)
-                                .clip(RoundedCornerShape(100.dp))
-                                .background(MaterialTheme.colorScheme.onPrimaryContainer)
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = trendPct,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.primaryContainer
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            ScrollableChipRow(
+                                items = categories,
+                                selectedItem = selectedCategory,
+                                onSelected = { viewModel.updateCategory(it) }
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Filter Location", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            ScrollableChipRow(
+                                items = locations,
+                                selectedItem = selectedLocation,
+                                onSelected = { viewModel.updateLocation(it) }
+                            )
+                        }
+                    }
 
+                    Spacer(modifier = Modifier.height(4.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Left: visual initials outline stack
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
+                        Text(
+                            text = "Filter by Budget",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.testTag("price_filter_section_title")
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "₵${priceRange.start.toInt()} - ₵${priceRange.endInclusive.toInt()}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Terracotta,
+                                modifier = Modifier.testTag("price_filter_range_text")
+                            )
+                            if (priceRange.start > 0f || priceRange.endInclusive < maxProductPrice) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Reset",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .clickable { priceRange = 0f..maxProductPrice }
+                                        .testTag("price_filter_reset_btn")
+                                )
+                            }
+                        }
+                    }
+
+                    RangeSlider(
+                        value = priceRange,
+                        onValueChange = { priceRange = it },
+                        valueRange = 0f..maxProductPrice,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                            .testTag("price_range_slider"),
+                        colors = SliderDefaults.colors(
+                            activeTrackColor = ForestGreen,
+                            inactiveTrackColor = ForestGreen.copy(alpha = 0.15f),
+                            thumbColor = SavannahGold,
+                            activeTickColor = SavannahGold
+                        )
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "₵0",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.testTag("price_filter_min_label")
+                        )
+                        Text(
+                            text = "₵${maxProductPrice.toInt()}",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.testTag("price_filter_max_label")
+                        )
+                    }
+                }
+
+                val filteredProducts = products.filter { product ->
+                    val matchesQuery = product.title.contains(searchQuery, ignoreCase = true) ||
+                            product.description.contains(searchQuery, ignoreCase = true)
+                    val matchesCategory = selectedCategory == "All" || product.category == selectedCategory
+                    val matchesLocation = selectedLocation == "All" || product.location == selectedLocation
+                    val matchesPrice = product.price >= priceRange.start && product.price <= priceRange.endInclusive
+                    matchesQuery && matchesCategory && matchesLocation && matchesPrice
+                }
+
+                if (filteredProducts.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
                         ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = "No products found",
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.outline
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "No listings matches your filter.",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Text(
+                                text = "Try modifying your filters, clearing your search query, or post an ad yourself!",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.outline,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        contentPadding = PaddingValues(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(filteredProducts) { product ->
+                            ProductGridItem(product = product, onClick = { viewModel.selectProduct(product) })
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ScrollableChipRow(
+    items: List<String>,
+    selectedItem: String,
+    onSelected: (String) -> Unit
+) {
+    androidx.compose.foundation.lazy.LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        contentPadding = PaddingValues(end = 12.dp)
+    ) {
+        items(items) { item ->
+            val isSelected = item == selectedItem
+            FilterChip(
+                selected = isSelected,
+                onClick = { onSelected(item) },
+                label = { Text(item, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = SavannahGold,
+                    selectedLabelColor = Color.Black,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                modifier = Modifier.testTag("chip_$item")
+            )
+        }
+    }
+}
+
+@Composable
+fun ProductGridItem(product: Product, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .testTag("product_card_${product.id}"),
+        colors = CardDefaults.cardColors(
+            containerColor = if (product.isPremium) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant
+        ),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (product.isPremium) 3.dp else 0.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(115.dp)
+                        .background(
+                            Brush.linearGradient(
+                                colors = when (product.imageId % 4) {
+                                    0 -> listOf(Color(0xFFE6D5B8), Color(0xFFC5A880))
+                                    1 -> listOf(Color(0xFFD4E2D4), Color(0xFF99A98F))
+                                    2 -> listOf(Color(0xFFF3C5C5), Color(0xFFC58B8B))
+                                    else -> listOf(Color(0xFFCEE5D0), Color(0xFF94B49F))
+                                }
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = when (product.category) {
+                            "Yam & Produce" -> Icons.Default.Home
+                            "Electronics & Phones" -> Icons.Default.Settings
+                            "Fashion & Apparel" -> Icons.Default.Star
+                            "Local Crafts & Cosmetics" -> Icons.Default.Person
+                            else -> Icons.Default.Home
+                        },
+                        contentDescription = "Category Symbol",
+                        tint = ForestGreen.copy(alpha = 0.7f),
+                        modifier = Modifier.size(42.dp)
+                    )
+                }
+
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Text(
+                        text = product.title,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    Text(
+                        text = "${"%,.2f".format(product.price)} GHS",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp,
+                        color = Terracotta
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Place,
+                            contentDescription = "location",
+                            tint = SavannahGold,
+                            modifier = Modifier.size(11.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = product.location,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.outline,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (product.acceptsMoMo) {
+                            PaymentBadge(label = "MoMo", bgColor = Color(0xFFFFF0B3), textColor = Color(0xFF7F6000))
+                        }
+                        if (product.acceptsCard) {
+                            PaymentBadge(label = "Card", bgColor = Color(0xFFD2E3FC), textColor = Color(0xFF174EA6))
+                        }
+                        if (product.isSold) {
+                            PaymentBadge(label = "SOLD", bgColor = Color(0xFFFCE8E6), textColor = Color(0xFFC5221F))
+                        }
+                    }
+                }
+            }
+
+            if (product.isPremium && !product.isSold) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 8.dp, end = 8.dp)
+                        .background(PremiumGold, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Star, contentDescription = "Premium", tint = Color.Black, modifier = Modifier.size(12.dp))
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text("PROMOTED", fontSize = 8.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PaymentBadge(label: String, bgColor: Color, textColor: Color) {
+    Box(
+        modifier = Modifier
+            .background(bgColor, RoundedCornerShape(4.dp))
+            .padding(horizontal = 4.dp, vertical = 2.dp)
+    ) {
+        Text(label, fontSize = 8.sp, color = textColor, fontWeight = FontWeight.ExtraBold)
+    }
+}
+
+// ============================================
+// PRODUCT DETAIL VIEW
+// ============================================
+@Composable
+fun ProductDetailView(
+    product: Product,
+    viewModel: FinanceViewModel,
+    onBack: () -> Unit
+) {
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    val reviewsList by viewModel.reviews.collectAsStateWithLifecycle()
+    val sellerReviews = reviewsList.filter { it.sellerId == product.sellerId }
+    val averageRating = if (sellerReviews.isNotEmpty()) sellerReviews.map { it.rating }.average() else 0.0
+    val totalReviews = sellerReviews.size
+    var showSellerProfile by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("product_detail_screen")
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack, modifier = Modifier.testTag("back_button")) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.primary)
+            }
+            Text(
+                text = "Listing Details",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.weight(1f)
+            )
+            if (currentUser != null && currentUser?.id == product.sellerId) {
+                IconButton(onClick = {
+                    viewModel.deleteProduct(product)
+                    onBack()
+                }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete Ad", tint = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        ) {
+            item {
+                ProductImageCarousel(product = product)
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = product.title,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Place, contentDescription = "Location", tint = SavannahGold, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(product.location, fontSize = 13.sp, color = MaterialTheme.colorScheme.outline)
+                        }
+                    }
+                    Text(
+                        text = "${"%,.2f".format(product.price)} GHS",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Terracotta,
+                        textAlign = TextAlign.End
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+                Text("Seller Information", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(6.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showSellerProfile = true }
+                        .testTag("product_detail_seller_card")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(SavannahGold, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = product.sellerName.take(1).uppercase(),
+                                color = Color.Black,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy((-8).dp),
-                                modifier = Modifier.padding(end = 8.dp)
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                if (linked.isEmpty()) {
+                                Text(product.sellerName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                if (product.isSellerVerified) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = "Verified Seller",
+                                        tint = RegularGreen,
+                                        modifier = Modifier.size(16.dp).testTag("seller_verified_badge_icon")
+                                    )
+                                }
+                            }
+                            // Star Rating & Review count line
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(top = 1.dp)
+                            ) {
+                                repeat(5) { index ->
+                                    val isFilled = index < averageRating.toInt()
+                                    Icon(
+                                        imageVector = Icons.Default.Star,
+                                        contentDescription = null,
+                                        tint = if (isFilled) SavannahGold else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                                        modifier = Modifier.size(13.dp).testTag("seller_card_star_$index")
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (totalReviews > 0) "${"%.1f".format(averageRating)} ($totalReviews feedbacks)" else "No reviews yet",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.testTag("seller_card_rating_text")
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "• View Trust Profile",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.testTag("view_seller_profile_link")
+                                )
+                            }
+                            if (product.isSellerVerified) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(top = 2.dp)
+                                ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(28.dp)
-                                            .clip(CircleShape)
-                                            .border(1.5.dp, MaterialTheme.colorScheme.primaryContainer, CircleShape)
-                                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                                        contentAlignment = Alignment.Center
+                                            .background(RegularGreen.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
                                     ) {
-                                        Text(
-                                            text = "Ø",
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                } else {
-                                    linked.take(3).forEach { acc ->
-                                        val initial = acc.name.split(" ")
-                                            .filter { it.isNotEmpty() }
-                                            .joinToString("") { it.take(1) }
-                                            .take(2)
-                                            .uppercase()
-                                        Box(
-                                            modifier = Modifier
-                                                .size(28.dp)
-                                                .clip(CircleShape)
-                                                .border(1.5.dp, MaterialTheme.colorScheme.primaryContainer, CircleShape)
-                                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                                            contentAlignment = Alignment.Center
-                                        ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = RegularGreen,
+                                                modifier = Modifier.size(10.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
                                             Text(
-                                                text = initial,
+                                                text = product.sellerVerificationBadge.ifEmpty { "Verified Member" },
                                                 fontSize = 9.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                color = RegularGreen,
+                                                modifier = Modifier.testTag("seller_badge_text")
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(top = 2.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .background(Color.Gray.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Default.Info,
+                                                contentDescription = null,
+                                                tint = Color.Gray,
+                                                modifier = Modifier.size(10.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "Self-Declared Account",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = Color.Gray,
+                                                modifier = Modifier.testTag("seller_badge_unverified_text")
                                             )
                                         }
                                     }
                                 }
                             }
-                            Text(
-                                text = "${linked.size} Accounts Synced",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
-                                fontWeight = FontWeight.Medium
-                            )
                         }
-
-                        // Right: Small details showing net inflow details
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "In: " + formatCurrency(totalIncome),
-                                color = IncomeColor,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Out: " + formatCurrency(Math.abs(totalExpense)),
-                                color = ExpenseColor,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                        Row {
+                            IconButton(onClick = {
+                                val intent = Intent(Intent.ACTION_DIAL).apply {
+                                    data = Uri.parse("tel:${product.sellerPhone}")
+                                }
+                                context.startActivity(intent)
+                            }) {
+                                Icon(Icons.Default.Call, contentDescription = "Call", tint = ForestGreen)
+                            }
                         }
                     }
                 }
-            }
-        }
-        
-        // Monthly Budget Tracker Card matching HTML pattern
-        item {
-            val budgetLimit = 2500.0
-            val spentAmount = Math.abs(totalExpense)
-            val pctPlayed = (spentAmount / budgetLimit).coerceIn(0.0, 1.0)
-            val pctString = String.format(Locale.US, "%.0f%%", pctPlayed * 100)
-            
-            // Days remaining in month
-            val calendar = Calendar.getInstance()
-            val maxDay = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
-            val currDay = calendar.get(Calendar.DAY_OF_MONTH)
-            val daysRemaining = (maxDay - currDay).coerceAtLeast(1)
 
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(28.dp))
-                    .border(width = 1.dp, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(28.dp)),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text("Description", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = product.description,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Monthly Budget",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = formatCurrency(spentAmount) + " / " + formatCurrency(budgetLimit),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
 
-                    // Progress Track Bar
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(10.dp)
-                            .clip(RoundedCornerShape(100.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(pctPlayed.toFloat())
-                                .fillMaxHeight()
-                                .clip(RoundedCornerShape(100.dp))
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
-                    }
+                Spacer(modifier = Modifier.height(16.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Spent " + pctString,
-                            fontSize = 11.sp,
-                            color = Color(0xFFC9C5D0),
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = "$daysRemaining Days Remaining",
-                            fontSize = 11.sp,
-                            color = Color(0xFFC9C5D0),
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-        }
-
-        // Custom Bezier Trend Graph Card
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(28.dp))
-                    .border(width = 1.dp, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(28.dp)),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Monthly Budget Spending Trends",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = "Aggregated visual timeline based on local Room logs",
-                        fontSize = 11.sp,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-                    
-                    // Bezier Drawing Canvas
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(130.dp)
-                    ) {
-                        TrendBezierGraph(transactions = transactionList)
-                    }
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Day 1 (Start)", fontSize = 9.sp, color = Color.Gray)
-                        Text("Timeline Distribution", fontSize = 9.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-                        Text("Day 30 (End)", fontSize = 9.sp, color = Color.Gray)
-                    }
-                }
-            }
-        }
-
-        // Category Budget Proportion Rings
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(28.dp))
-                    .border(width = 1.dp, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(28.dp)),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            ) {
+                Text("Accepted Payment Channels", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(6.dp))
                 Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.weight(1.3f)) {
-                        Text(
-                            text = "Custom Category Matrix",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
+                    if (product.acceptsMoMo) {
+                        PaymentMethodPill(
+                            channelName = product.momoCarrier,
+                            icon = Icons.Default.Refresh,
+                            color = Color(0xFFFFF7C2)
                         )
-                        Text(
-                            text = "Local composition index",
-                            fontSize = 11.sp,
-                            color = Color.Gray,
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
-                        
-                        // Categories proportional breakdown
-                        val activeSpentCats = transactionList.filter { it.amount < 0 }
-                        val sumSpendGlobal = activeSpentCats.sumOf { Math.abs(it.amount) }
-                        
-                        if (sumSpendGlobal == 0.0) {
-                            Text("No outflow recorded to calculate relative shares.", fontSize = 11.sp, color = Color.Gray)
-                        } else {
-                            val categoryAggregations = activeSpentCats
-                                .groupBy { it.category }
-                                .mapValues { entry -> entry.value.sumOf { Math.abs(it.amount) } }
-                                .toList()
-                                .sortedByDescending { it.second }
-                                .take(3)
-                            
-                            categoryAggregations.forEach { (catName, amt) ->
-                                val pct = (amt / sumSpendGlobal * 100).toInt()
-                                val catConfig = categoriesList.find { it.name == catName }
-                                val color = Color(android.graphics.Color.parseColor(catConfig?.colorHex ?: "#94A3B8"))
-                                
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(vertical = 3.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(color)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "$catName ($pct%)",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        }
                     }
-
-                    // Interactive Custom ring drawing
-                    Box(
-                        modifier = Modifier
-                            .size(100.dp)
-                            .weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CategoryDonutChart(transactions = transactionList, categories = categoriesList)
+                    if (product.acceptsCard) {
+                        PaymentMethodPill(
+                            channelName = "Bank Debit Card",
+                            icon = Icons.Default.Lock,
+                            color = Color(0xFFD4E4FC)
+                        )
                     }
                 }
-            }
-        }
-        
-        // TWO-WAY SYNCHRONIZATION WITH BANK ACCOUNTS
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(28.dp))
-                    .border(width = 1.dp, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(28.dp)),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                if (currentUser == null || currentUser?.id != product.sellerId) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Column {
-                            Text(
-                                text = "Linked Bank Accounts",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Encrypt local sandbox feeds",
-                                fontSize = 11.sp,
-                                color = Color.Gray
-                            )
-                        }
-                        
                         Button(
-                            onClick = { viewModel.syncBankAccounts() },
-                            enabled = !isBankSyncing,
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary.copy(0.12f),
-                                contentColor = MaterialTheme.colorScheme.primary
-                            ),
-                            modifier = Modifier.testTag("bank_sync_btn")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (isBankSyncing) "Syncing..." else "Sync", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    accountsList.forEach { acc ->
-                        Card(
+                            onClick = { viewModel.startChatWithProduct(product) },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.primary),
+                            shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (acc.isLinked) MaterialTheme.colorScheme.primary.copy(0.04f) else MaterialTheme.colorScheme.surfaceVariant.copy(0.2f)
-                            ),
-                            shape = RoundedCornerShape(12.dp)
+                                .weight(1f)
+                                .height(50.dp)
+                                .testTag("chat_seller_button")
                         ) {
-                            Row(
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Send, contentDescription = "Send Message", modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Negotiate")
+                            }
+                        }
+
+                        if (!product.isSold) {
+                            Button(
+                                onClick = { viewModel.initiateCheckout(product) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Terracotta, contentColor = Color.White),
+                                shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                    .weight(1.1f)
+                                    .height(50.dp)
+                                    .testTag("buy_item_button")
                             ) {
-                                Column(modifier = Modifier.weight(1.5f)) {
-                                    Text(
-                                        text = acc.name,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp
-                                    )
-                                    Text(
-                                        text = "${acc.type} • ${if (acc.isLinked) "Synced Securely" else "Link Pending"}",
-                                        fontSize = 11.sp,
-                                        color = if (acc.isLinked) MaterialTheme.colorScheme.primary else Color.Gray
-                                    )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.CheckCircle, contentDescription = "Buy", modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Buy Now (Safe)")
                                 }
-                                
-                                Text(
-                                    text = formatCurrency(acc.balance),
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 14.sp,
-                                    modifier = Modifier.padding(horizontal = 12.dp),
-                                    color = if (acc.balance >= 0) IncomeColor else ExpenseColor
-                                )
-                                
-                                Switch(
-                                    checked = acc.isLinked,
-                                    onCheckedChange = { viewModel.toggleLinkAccount(acc.name) },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                        checkedTrackColor = MaterialTheme.colorScheme.primary.copy(0.3f)
-                                    )
-                                )
+                            }
+                        } else {
+                            Button(
+                                onClick = {},
+                                enabled = false,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .weight(1.1f)
+                                    .height(50.dp)
+                            ) {
+                                Text("ALREADY SOLD")
+                            }
+                        }
+                    }
+                } else {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text("Manage Your Ad Space", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                if (!product.isPremium) {
+                                    Button(
+                                        onClick = { viewModel.promoteProduct(product) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = SavannahGold, contentColor = Color.Black),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Boost Ad")
+                                    }
+                                }
+
+                                if (!product.isSold) {
+                                    Button(
+                                        onClick = { viewModel.markProductAsSold(product) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = ForestGreen, contentColor = Color.White),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Mark as Sold")
+                                    }
+                                }
                             }
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(32.dp))
             }
         }
+    }
 
-        // AI FINANCIER COACH INSIGHTS GATED SEGMENT
-        item {
-            val insightsText by viewModel.aiInsights.collectAsState()
-            val isInsightsLoading by viewModel.isInsightsLoading.collectAsState()
+    if (showSellerProfile) {
+        SellerProfileReviewsDialog(
+            sellerId = product.sellerId,
+            sellerName = product.sellerName,
+            sellerVerificationBadge = product.sellerVerificationBadge,
+            isSellerVerified = product.isSellerVerified,
+            viewModel = viewModel,
+            onDismiss = { showSellerProfile = false }
+        )
+    }
+}
 
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(28.dp))
-                    .border(width = 1.dp, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(28.dp)),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(MintSecondary)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "AI Financial Coach",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            Text(
-                                text = "Secure, confidential budgets auditing",
-                                color = Color.Gray,
-                                fontSize = 11.sp
-                            )
-                        }
-
-                        Button(
-                            onClick = { viewModel.triggerAIInsights() },
-                            enabled = !isInsightsLoading,
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            ),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                            modifier = Modifier.testTag("ai_insights_btn")
-                        ) {
-                            if (isInsightsLoading) {
-                                CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
-                            } else {
-                                Text("Ask Coach", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-
-                    if (insightsText != null) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = insightsText!!,
-                                fontSize = 12.sp,
-                                lineHeight = 16.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(12.dp)
-                            )
-                        }
-                    }
-                }
-            }
+@Composable
+fun PaymentMethodPill(channelName: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color) {
+    Box(
+        modifier = Modifier
+            .background(color, RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = icon,
+                contentDescription = channelName,
+                tint = Color.Black,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(channelName, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black)
         }
     }
 }
 
-// ==================== SCREEN 2: TRANSACTIONS LIST LEDGER ====================
+// ============================================
+// CHAT NEGOTIATIONAL SCREEN
+// ============================================
 @Composable
-fun TransactionsScreen(viewModel: FinanceViewModel) {
-    val transactionList by viewModel.transactions.collectAsState()
-    val categoriesList by viewModel.categories.collectAsState()
-    val accountsList by viewModel.linkedAccounts.collectAsState()
-    
-    var searchQuery by remember { mutableStateOf("") }
-    var showDialog by remember { mutableStateOf(false) }
-    
-    // Filtered ledger rows
-    val filteredTx = if (searchQuery.trim().isEmpty()) {
-        transactionList
-    } else {
-        transactionList.filter {
-            it.description.contains(searchQuery, ignoreCase = true) ||
-            it.category.contains(searchQuery, ignoreCase = true)
-        }
-    }
-    
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp)
-    ) {
-        Spacer(modifier = Modifier.height(12.dp))
-        
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text("Search transactions...", fontSize = 13.sp) },
-                singleLine = true,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("tx_search_bar"),
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                )
-            )
+fun ChatNegotiateScreen(viewModel: FinanceViewModel) {
+    val allMessages by viewModel.allMessages.collectAsStateWithLifecycle()
+    val products by viewModel.products.collectAsStateWithLifecycle()
+    val activeChatProductId by viewModel.activeChatProductId.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
+    val isOfflineMode by viewModel.isOfflineMode.collectAsStateWithLifecycle()
+    val isSyncingMessages by viewModel.isSyncingMessages.collectAsStateWithLifecycle()
 
-            FloatingActionButton(
-                onClick = { showDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier
-                    .size(50.dp)
-                    .testTag("add_tx_fab"),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Icon(Icons.Default.Add, "Add Transaction")
+    if (currentUser == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.Lock, contentDescription = "Authentication Required", modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outline)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("P2P Chats Locked", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "Please log in using email, phone number, or Google directly on the Profile hub page.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.outline,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                )
+                Button(
+                    onClick = { viewModel.selectTab("Profile") },
+                    colors = ButtonDefaults.buttonColors(containerColor = SavannahGold, contentColor = Color.Black),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Go to Sign In / Sign Up")
+                }
             }
         }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        if (filteredTx.isEmpty()) {
+        return
+    }
+
+    val activeGroup = activeChatProductId
+
+    if (activeGroup == null) {
+        val messagesByProduct = allMessages.groupBy { it.productId }
+        val productMap = products.associateBy { it.id }
+
+        Column(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
+                    .background(ForestGreen)
+                    .padding(18.dp)
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = null,
-                        tint = Color.Gray,
-                        modifier = Modifier.size(48.dp)
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("No transactions logged yet.", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                    Text("Use the Floating Action Button, or link systems above.", fontSize = 11.sp, color = Color.Gray)
-                }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 16.dp)
-            ) {
-                items(filteredTx) { tx ->
-                    val isExpense = tx.amount < 0
-                    val config = categoriesList.find { it.name == tx.category }
-                    val colorHex = config?.colorHex ?: "#94A3B8"
-                    val parsedColor = Color(android.graphics.Color.parseColor(colorHex))
-                    
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { }
-                            .testTag("tx_card_${tx.id}"),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Category Bubble Circle
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(parsedColor.copy(alpha = 0.15f))
-                                    .align(Alignment.CenterVertically),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = getCleanCategoryEmoji(tx.category),
-                                    fontSize = 18.sp
-                                )
-                            }
-                            
-                            Spacer(modifier = Modifier.width(12.dp))
-                            
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = tx.description,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(tx.category, fontSize = 11.sp, color = parsedColor, fontWeight = FontWeight.Bold)
-                                    Text(" • ", fontSize = 11.sp, color = Color.Gray)
-                                    Text(tx.bankAccountName, fontSize = 11.sp, color = Color.Gray)
-                                }
-                            }
-                            
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    text = (if (!isExpense) "+" else "") + formatCurrency(tx.amount),
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 14.sp,
-                                    color = if (isExpense) ExpenseColor else IncomeColor
-                                )
-                                Text(
-                                    text = SimpleDateFormat("MMM dd", Locale.getDefault()).format(Date(tx.date)),
-                                    fontSize = 10.sp,
-                                    color = Color.Gray
-                                )
-                            }
-                            
-                            Spacer(modifier = Modifier.width(8.dp))
-                            
-                            IconButton(
-                                onClick = { viewModel.deleteTransaction(tx) },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Remove Transaction",
-                                    tint = ExpenseColor.copy(0.7f),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    // --- DIALOG: ADD TRANSACTION MANUAL + AI WRAPPERS ---
-    if (showDialog) {
-        var descInput by remember { mutableStateOf("") }
-        var amountInput by remember { mutableStateOf("") }
-        var isInvoice by remember { mutableStateOf(false) } // Expense or Income
-        var selectedCategory by remember { mutableStateOf(categoriesList.firstOrNull()?.name ?: "Food & Dining") }
-        var selectedAccount by remember { mutableStateOf(accountsList.firstOrNull() { it.isLinked }?.name ?: "Manual Cash") }
-        var autoRecur by remember { mutableStateOf(false) }
-        val isCategorizing by viewModel.isAICategorizing.collectAsState()
-        
-        Dialog(onDismissRequest = { showDialog = false }) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(28.dp))
-                    .border(width = 1.dp, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(28.dp)),
-                color = MaterialTheme.colorScheme.surface
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "Add Transaction",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 17.sp,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    
-                    // Expense vs Inflow selector
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        Button(
-                            onClick = { isInvoice = false },
-                            modifier = Modifier.weight(1f).padding(end = 4.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (!isInvoice) ExpenseColor else MaterialTheme.colorScheme.surfaceVariant,
-                                contentColor = if (!isInvoice) Color.White else MaterialTheme.colorScheme.onSurface
-                            )
-                        ) {
-                            Text("Expense", fontSize = 12.sp)
-                        }
-                        
-                        Button(
-                            onClick = { isInvoice = true },
-                            modifier = Modifier.weight(1f).padding(start = 4.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isInvoice) IncomeColor else MaterialTheme.colorScheme.surfaceVariant,
-                                contentColor = if (isInvoice) Color.White else MaterialTheme.colorScheme.onSurface
-                            )
-                        ) {
-                            Text("Inflow", fontSize = 12.sp)
-                        }
-                    }
-                    
-                    // Description Input with Gemini Predictive Tag
-                    Text("Description", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = descInput,
-                            onValueChange = { descInput = it },
-                            placeholder = { Text("Starbucks, Payroll Deposit...") },
-                            modifier = Modifier.weight(1f).testTag("add_tx_desc"),
-                            shape = RoundedCornerShape(10.dp),
-                            singleLine = true
-                        )
-                        
-                        Spacer(modifier = Modifier.width(6.dp))
-                        
-                        // Suggest category with Gemini AI
-                        IconButton(
-                            onClick = {
-                                viewModel.getAISuggestedCategory(descInput) { result ->
-                                    selectedCategory = result
-                                }
-                            },
-                            enabled = descInput.isNotBlank() && !isCategorizing,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-                        ) {
-                            if (isCategorizing) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = "AI Suggest category",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                    }
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Amount ($)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                            OutlinedTextField(
-                                value = amountInput,
-                                onValueChange = { amountInput = it },
-                                placeholder = { Text("0.00") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                shape = RoundedCornerShape(10.dp),
-                                singleLine = true,
-                                modifier = Modifier.testTag("add_tx_amount")
-                            )
-                        }
-                        
-                        Column(modifier = Modifier.weight(1.2f)) {
-                            Text("Category", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                            // Clean Selection List fallback simulated simple drop selector
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(56.dp)
-                                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(0.1f))
-                                    .clickable {
-                                        // Spin cycle categories list to make manual pick
-                                        val idx = categoriesList.indexOfFirst { it.name == selectedCategory }
-                                        val nxt = if (idx == -1 || idx == categoriesList.size - 1) 0 else idx + 1
-                                        selectedCategory = categoriesList[nxt].name
-                                    },
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                Text(
-                                    text = getCleanCategoryEmoji(selectedCategory) + " " + selectedCategory,
-                                    modifier = Modifier.padding(start = 12.dp),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Column(modifier = Modifier.weight(1.2f)) {
-                            Text("Bank Account", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(50.dp)
-                                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        val available = accountsList.filter { it.isLinked }.map { it.name } + listOf("Manual Cash")
-                                        val idx = available.indexOf(selectedAccount)
-                                        val nxt = if (idx == -1 || idx == available.size - 1) 0 else idx + 1
-                                        selectedAccount = available[nxt]
-                                    },
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                Text(selectedAccount, modifier = Modifier.padding(start = 12.dp), fontSize = 13.sp)
-                            }
-                        }
-                        
-                        Column(
-                            modifier = Modifier.weight(0.8f),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text("Is Recurring", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Checkbox(
-                                checked = autoRecur,
-                                onCheckedChange = { autoRecur = it }
-                            )
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(10.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { showDialog = false },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("Cancel")
-                        }
-                        
-                        Button(
-                            onClick = {
-                                val cleanAmt = amountInput.toDoubleOrNull() ?: 0.0
-                                val finalizedAmount = if (isInvoice) cleanAmt else -cleanAmt
-                                if (descInput.isNotBlank() && cleanAmt > 0.0) {
-                                    viewModel.addManualTransaction(
-                                        finalizedAmount,
-                                        descInput,
-                                        selectedCategory,
-                                        selectedAccount,
-                                        autoRecur
-                                    )
-                                    showDialog = false
-                                }
-                            },
-                            modifier = Modifier.weight(1f).testTag("save_tx_btn"),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                        ) {
-                            Text("Save Ledger")
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ==================== SCREEN 3: RECURRING TRANSACTIONS / REMINDERS ====================
-@Composable
-fun RemindersScreen(viewModel: FinanceViewModel) {
-    val remindersList by viewModel.reminders.collectAsState()
-    val categoriesList by viewModel.categories.collectAsState()
-    
-    var showAddDialog by remember { mutableStateOf(false) }
-    
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp)
-    ) {
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
                 Text(
-                    text = "Recurring Bill Reminders",
+                    text = "Transaction Negotiations 💬",
+                    color = SavannahGold,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
-                    text = "Track upcoming recurring transactions offline",
-                    fontSize = 11.sp,
-                    color = Color.Gray
-                )
             }
-            
-            Button(
-                onClick = { showAddDialog = true },
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                modifier = Modifier.testTag("add_reminder_btn")
-            ) {
-                Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Add", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        if (remindersList.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.Notifications,
-                        contentDescription = null,
-                        tint = Color.Gray,
-                        modifier = Modifier.size(50.dp)
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text("No bills or remittances configured.", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                    Text("Configured dues project monthly totals seamlessly.", fontSize = 11.sp, color = Color.Gray)
+
+            OfflineStatusBar(
+                isOffline = isOfflineMode,
+                isSyncing = isSyncingMessages,
+                onToggleOffline = { viewModel.setOfflineMode(it) }
+            )
+
+            if (messagesByProduct.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.Send,
+                            contentDescription = "No chats",
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.outline
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("No negotiating yet. Go browse some yams and click contact!", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                    }
                 }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 24.dp)
-            ) {
-                items(remindersList) { reminder ->
-                    val config = categoriesList.find { it.name == reminder.category }
-                    val colorHex = config?.colorHex ?: "#94A3B8"
-                    val parsedColor = Color(android.graphics.Color.parseColor(colorHex))
-                    
-                    // Days left calculator
-                    val daysLeft = ((reminder.nextDueDate - System.currentTimeMillis()) / (24 * 3600 * 1000L)).toInt()
-                    
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("reminder_card_${reminder.id}"),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (daysLeft <= 3) MaterialTheme.colorScheme.primaryContainer.copy(0.1f) else MaterialTheme.colorScheme.surface
-                        ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                    ) {
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(messagesByProduct.keys.toList()) { prodId ->
+                        val itemMsgs = messagesByProduct[prodId] ?: emptyList()
+                        val latest = itemMsgs.lastOrNull()
+                        val product = productMap[prodId]
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(14.dp),
+                                .clickable { viewModel.selectProduct(product) }
+                                .padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(parsedColor.copy(alpha = 0.12f)),
+                                    .size(46.dp)
+                                    .background(SavannahGold, CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(getCleanCategoryEmoji(reminder.category), fontSize = 16.sp)
+                                Icon(Icons.Default.Home, contentDescription = "store", tint = Color.Black)
                             }
-                            
                             Spacer(modifier = Modifier.width(12.dp))
-                            
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = reminder.title,
+                                    text = product?.title ?: latest?.productTitle ?: "Negotiation Ad",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
-                                )
-                                Text(
-                                    text = "${reminder.frequency} • ${reminder.category}",
-                                    fontSize = 11.sp,
-                                    color = Color.Gray
-                                )
-                            }
-                            
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    text = formatCurrency(reminder.amount),
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 13.sp,
+                                    fontSize = 14.sp,
                                     color = MaterialTheme.colorScheme.onBackground
                                 )
-                                
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(if (daysLeft <= 3) ExpenseColor.copy(0.12f) else MaterialTheme.colorScheme.primary.copy(0.1f))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                Text(
+                                    text = latest?.messageText ?: "",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = product?.let { "${"%,.0f".format(it.price)} GHS" } ?: "",
+                                    fontWeight = FontWeight.Black,
+                                    color = Terracotta,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+                    }
+                }
+            }
+        }
+    } else {
+        val product = products.find { it.id == activeGroup }
+        val dialogMessages = allMessages.filter { it.productId == activeGroup }
+
+        var textInput by remember { mutableStateOf("") }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("chat_room_block")
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { viewModel.selectProduct(null) }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(ForestGreen, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        product?.sellerName?.take(1)?.uppercase() ?: "S",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        product?.title ?: "Item Chat",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            product?.sellerName?.let { "Talking to $it" } ?: "Direct bargaining",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                        if (product?.isSellerVerified == true) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Verified Seller",
+                                tint = RegularGreen,
+                                modifier = Modifier.size(12.dp).testTag("chat_seller_verified_icon")
+                            )
+                        }
+                    }
+                }
+                if (product != null && !product.isSold) {
+                    Button(
+                        onClick = { viewModel.initiateCheckout(product) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Terracotta),
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                        modifier = Modifier
+                            .height(32.dp)
+                            .testTag("checkout_chat_btn")
+                    ) {
+                        Text("Pay Secure", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            OfflineStatusBar(
+                isOffline = isOfflineMode,
+                isSyncing = isSyncingMessages,
+                onToggleOffline = { viewModel.setOfflineMode(it) }
+            )
+
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(dialogMessages) { msg ->
+                    val isMyMsg = msg.senderId == currentUser?.id
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = if (isMyMsg) Alignment.CenterEnd else Alignment.CenterStart
+                    ) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isMyMsg) ForestGreen else MaterialTheme.colorScheme.surfaceVariant
+                            ),
+                            shape = if (isMyMsg) {
+                                RoundedCornerShape(12.dp, 1.dp, 12.dp, 12.dp)
+                            } else {
+                                RoundedCornerShape(1.dp, 12.dp, 12.dp, 12.dp)
+                            },
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = msg.messageText,
+                                    color = if (isMyMsg) Color.White else MaterialTheme.colorScheme.onBackground,
+                                    fontSize = 14.sp
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.End,
+                                    modifier = Modifier.align(Alignment.End)
                                 ) {
                                     Text(
-                                        text = if (daysLeft <= 0) "Due Today" else "In $daysLeft days",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (daysLeft <= 3) ExpenseColor else MaterialTheme.colorScheme.primary
+                                        text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(msg.timestamp)),
+                                        fontSize = 9.sp,
+                                        color = if (isMyMsg) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outline
                                     )
+                                    if (isMyMsg) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        if (msg.status == "PENDING") {
+                                            Text(
+                                                text = "🕒",
+                                                fontSize = 9.sp,
+                                                color = Color.White.copy(alpha = 0.7f),
+                                                modifier = Modifier.testTag("msg_status_pending")
+                                            )
+                                        } else {
+                                            Text(
+                                                text = "✓✓",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = SavannahGold,
+                                                modifier = Modifier.testTag("msg_status_sent")
+                                            )
+                                        }
+                                    }
                                 }
                             }
-                            
-                            Spacer(modifier = Modifier.width(8.dp))
-                            
-                            IconButton(onClick = { viewModel.deleteReminder(reminder) }) {
-                                Icon(Icons.Default.Delete, "Remove Reminder", tint = ExpenseColor.copy(0.7f), modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = textInput,
+                    onValueChange = { textInput = it },
+                    placeholder = { Text("Barter price, ask for details...") },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("chat_input_text"),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = SavannahGold,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                IconButton(
+                    onClick = {
+                        if (textInput.isNotEmpty()) {
+                            viewModel.sendChatMessage(activeGroup, textInput)
+                            textInput = ""
+                        }
+                    },
+                    modifier = Modifier
+                        .background(SavannahGold, CircleShape)
+                        .testTag("send_msg_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Send,
+                        contentDescription = "Send Message",
+                        tint = Color.Black,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ============================================
+// SELL SCREEN (Ad Listing Form for P2P Sellers)
+// ============================================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SellItemScreen(viewModel: FinanceViewModel) {
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
+    val isGeneratingDescription by viewModel.isGeneratingDescription.collectAsStateWithLifecycle()
+    val generatedDescription by viewModel.generatedDescription.collectAsStateWithLifecycle()
+
+    if (currentUser == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.Edit, contentDescription = "Authentication Required", modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outline)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Seller Authentication Required", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "Authentic P2P transactions in Jmarket Ghana require registering email, phone carrier, or direct Google accounts.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.outline,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                )
+                Button(
+                    onClick = { viewModel.selectTab("Profile") },
+                    colors = ButtonDefaults.buttonColors(containerColor = SavannahGold, contentColor = Color.Black),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Go to Sign In / Sign Up")
+                }
+            }
+        }
+        return
+    }
+
+    var title by remember { mutableStateOf("") }
+    var priceStr by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var selectedCat by remember { mutableStateOf("Yam & Produce") }
+    var selectedLoc by remember { mutableStateOf("Salaga, Savannah") }
+
+    var acceptsMoMo by remember { mutableStateOf(true) }
+    var acceptsCard by remember { mutableStateOf(true) }
+    var momoCarrier by remember { mutableStateOf("MTN MoMo") }
+    var momoNumberBySeller by remember { mutableStateOf(currentUser?.momoNumber ?: "") }
+
+    var formError by remember { mutableStateOf<String?>(null) }
+    var briefNotesForAI by remember { mutableStateOf("") }
+
+    var activeAngle0 by remember { mutableStateOf(true) }
+    var activeAngle1 by remember { mutableStateOf(true) }
+    var activeAngle2 by remember { mutableStateOf(true) }
+    var activeAngle3 by remember { mutableStateOf(true) }
+
+    LaunchedEffect(generatedDescription) {
+        if (generatedDescription.isNotEmpty() && !generatedDescription.startsWith("Please input")) {
+            description = generatedDescription
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .testTag("sell_item_form"),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(ForestGreen, RoundedCornerShape(12.dp))
+                    .padding(14.dp)
+            ) {
+                Text(
+                    text = "List New Product in Ghana 🇬🇭",
+                    color = SavannahGold,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        item {
+            Column {
+                Text("Ad Title *", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    placeholder = { Text("e.g., Premium Fresh Savannah Yams...") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("ad_title_input"),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SavannahGold)
+                )
+            }
+        }
+
+        item {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Price (GHS) *", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    OutlinedTextField(
+                        value = priceStr,
+                        onValueChange = { priceStr = it },
+                        placeholder = { Text("e.g. 150") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("ad_price_input"),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SavannahGold)
+                    )
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Select Category", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    var expandedCat by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(
+                        expanded = expandedCat,
+                        onExpandedChange = { expandedCat = !expandedCat }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedCat,
+                            onValueChange = {},
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCat) },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SavannahGold)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedCat,
+                            onDismissRequest = { expandedCat = false }
+                        ) {
+                            listOf("Yam & Produce", "Electronics & Phones", "Fashion & Apparel", "Local Crafts & Cosmetics", "Home & Appliances").forEach { cat ->
+                                DropdownMenuItem(
+                                    text = { Text(cat) },
+                                    onClick = {
+                                        selectedCat = cat
+                                        expandedCat = false
+                                    }
+                                )
                             }
                         }
                     }
                 }
             }
         }
-    }
-    
-    // --- DIALOG: ADD RECURRING REMINDER ---
-    if (showAddDialog) {
-        var title by remember { mutableStateOf("") }
-        var amount by remember { mutableStateOf("") }
-        var category by remember { mutableStateOf(categoriesList.firstOrNull()?.name ?: "Food & Dining") }
-        var frequency by remember { mutableStateOf("Monthly") }
-        var dueDays by remember { mutableStateOf("5") }
-        
-        Dialog(onDismissRequest = { showAddDialog = false }) {
-            Surface(
+
+        item {
+            Column {
+                Text("Ghana Location", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                var expandedLoc by remember { mutableStateOf(false) }
+                ExposedDropdownMenuBox(
+                    expanded = expandedLoc,
+                    onExpandedChange = { expandedLoc = !expandedLoc }
+                ) {
+                    OutlinedTextField(
+                        value = selectedLoc,
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedLoc) },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SavannahGold)
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandedLoc,
+                        onDismissRequest = { expandedLoc = false }
+                    ) {
+                        listOf("Salaga, Savannah", "Accra, Greater Accra", "Kumasi, Ashanti", "Tamale, Northern").forEach { loc ->
+                            DropdownMenuItem(
+                                text = { Text(loc) },
+                                onClick = {
+                                    selectedLoc = loc
+                                    expandedLoc = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("⚡ Gemini Product Copywriter", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
+                    Text("Input rapid bulleted features, and Gemini will craft your polished marketing ad copy description instantly!", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = briefNotesForAI,
+                        onValueChange = { briefNotesForAI = it },
+                        placeholder = { Text("e.g. freshly brought in, sweet soft, 50 tubers ready") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("ai_brief_notes"),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SavannahGold)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { viewModel.generateListingAI(title, selectedCat, selectedLoc, briefNotesForAI) },
+                        colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                        enabled = !isGeneratingDescription,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .align(Alignment.End)
+                            .testTag("ai_generate_ad_button")
+                    ) {
+                        if (isGeneratingDescription) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = "AI",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Generate Description", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Column {
+                Text("Ad Detailed Description *", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    placeholder = { Text("Describe item quality, conditions, and meetup instructions...") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(130.dp)
+                        .testTag("ad_description_input"),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SavannahGold)
+                )
+            }
+        }
+
+        item {
+            Column {
+                Text("Enable Carousel Photos", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text("Tap to select multiple premium styled slides for your listing carousel:", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val angles = listOf(
+                        Triple(0, "Shot 1", "Primary View"),
+                        Triple(1, "Shot 2", "Item Details"),
+                        Triple(2, "Shot 3", "Registry Seal"),
+                        Triple(3, "Shot 4", "Payment Detail")
+                    )
+                    
+                    angles.forEach { (index, shotName, sub) ->
+                        val isSelected = when (index) {
+                            0 -> activeAngle0
+                            1 -> activeAngle1
+                            2 -> activeAngle2
+                            else -> activeAngle3
+                        }
+                        
+                        Card(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(85.dp)
+                                .clickable {
+                                    val newVal = !isSelected
+                                    when (index) {
+                                        0 -> activeAngle0 = newVal
+                                        1 -> activeAngle1 = newVal
+                                        2 -> activeAngle2 = newVal
+                                        3 -> activeAngle3 = newVal
+                                    }
+                                }
+                                .testTag("angle_selection_card_$index"),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isSelected) ForestGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                width = 1.5.dp,
+                                color = if (isSelected) ForestGreen else Color.Transparent
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                Icon(
+                                    imageVector = if (isSelected) Icons.Default.Check else Icons.Default.Add,
+                                    contentDescription = null,
+                                    tint = if (isSelected) ForestGreen else MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(shotName, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (isSelected) ForestGreen else MaterialTheme.colorScheme.onSurface)
+                                    Text(sub, fontSize = 8.sp, color = MaterialTheme.colorScheme.outline, textAlign = TextAlign.Center, maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            HorizontalDivider()
+        }
+
+        item {
+            Column {
+                Text("P2P Accepted Payment Methods", fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Checkbox(checked = acceptsMoMo, onCheckedChange = { acceptsMoMo = it })
+                    Text("Accept Mobile Money (MoMo)", fontSize = 13.sp)
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Checkbox(checked = acceptsCard, onCheckedChange = { acceptsCard = it })
+                    Text("Accept Credit / Bank Card Inside App", fontSize = 13.sp)
+                }
+            }
+        }
+
+        if (acceptsMoMo) {
+            item {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(modifier = Modifier.weight(1.1f)) {
+                        Text("MoMo Registered Number", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                        OutlinedTextField(
+                            value = momoNumberBySeller,
+                            onValueChange = { momoNumberBySeller = it },
+                            placeholder = { Text("e.g., 0241234567") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("seller_momo_number"),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SavannahGold)
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(0.9f)) {
+                        Text("Carrier Network", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                        var expandedNet by remember { mutableStateOf(false) }
+                        ExposedDropdownMenuBox(
+                            expanded = expandedNet,
+                            onExpandedChange = { expandedNet = !expandedNet }
+                        ) {
+                            OutlinedTextField(
+                                value = momoCarrier,
+                                onValueChange = {},
+                                readOnly = true,
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedNet) },
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SavannahGold)
+                            )
+                            ExposedDropdownMenu(
+                                expanded = expandedNet,
+                                onDismissRequest = { expandedNet = false }
+                            ) {
+                                listOf("MTN MoMo", "Telecel Cash", "AT Money").forEach { net ->
+                                    DropdownMenuItem(
+                                        text = { Text(net) },
+                                        onClick = {
+                                            momoCarrier = net
+                                            expandedNet = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            formError?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            Button(
+                onClick = {
+                    val price = priceStr.toDoubleOrNull()
+                    if (title.isBlank() || price == null || description.isBlank()) {
+                        formError = "Please execute all required fields successfully with a valid numerical price."
+                    } else if (acceptsMoMo && momoNumberBySeller.isBlank()) {
+                        formError = "Please declare registered Mobile Money account number."
+                    } else {
+                        val selectedAnglesList = mutableListOf<String>()
+                        if (activeAngle0) selectedAnglesList.add("0")
+                        if (activeAngle1) selectedAnglesList.add("1")
+                        if (activeAngle2) selectedAnglesList.add("2")
+                        if (activeAngle3) selectedAnglesList.add("3")
+                        if (selectedAnglesList.isEmpty()) selectedAnglesList.add("0")
+                        val extraImageIdsString = selectedAnglesList.joinToString(",")
+
+                        viewModel.postProduct(
+                            title = title,
+                            description = description,
+                            price = price,
+                            category = selectedCat,
+                            location = selectedLoc,
+                            acceptsMoMo = acceptsMoMo,
+                            acceptsCard = acceptsCard,
+                            momoNumber = momoNumberBySeller,
+                            momoCarrier = momoCarrier,
+                            extraImageIds = extraImageIdsString
+                        )
+                        formError = null
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(28.dp))
-                    .border(width = 1.dp, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(28.dp)),
-                color = MaterialTheme.colorScheme.surface
+                    .height(50.dp)
+                    .testTag("submit_ad_button"),
+                colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                shape = RoundedCornerShape(10.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "Add Bill Reminder",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
-                    
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        label = { Text("Bill Description / Title") },
-                        modifier = Modifier.fillMaxWidth().testTag("add_reminder_title"),
-                        singleLine = true
-                    )
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                Text("Publish Ghana Ad Now")
+            }
+        }
+    }
+}
+
+// ============================================
+// ESCROW PAYMENT RECEIPTS SCREEN
+// ============================================
+@Composable
+fun ReceiptsScreen(viewModel: FinanceViewModel) {
+    val receipts by viewModel.receipts.collectAsStateWithLifecycle()
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(ForestGreen)
+                .padding(18.dp)
+        ) {
+            Text(
+                text = "Secure Payments Ledger",
+                color = SavannahGold,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        if (receipts.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.ShoppingCart, contentDescription = "Receipts", modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outline)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("No transactions logged. Safeguard yourself with digital escrow!", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                }
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(receipts) { receipt ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("receipt_${receipt.id}"),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        OutlinedTextField(
-                            value = amount,
-                            onValueChange = { amount = it },
-                            label = { Text("Amount ($)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f).testTag("add_reminder_amount"),
-                            singleLine = true
-                        )
-                        
-                        OutlinedTextField(
-                            value = dueDays,
-                            onValueChange = { dueDays = it },
-                            label = { Text("Due in (Days)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
-                        )
-                    }
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Category", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(50.dp)
-                                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        val idx = categoriesList.indexOfFirst { it.name == category }
-                                        val nxt = if (idx == -1 || idx == categoriesList.size - 1) 0 else idx + 1
-                                        category = categoriesList[nxt].name
-                                    },
-                                contentAlignment = Alignment.CenterStart
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(category, modifier = Modifier.padding(start = 12.dp), fontSize = 13.sp)
-                            }
-                        }
-                        
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Frequency", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(50.dp)
-                                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        val freqs = listOf("Weekly", "Monthly", "Yearly")
-                                        val idx = freqs.indexOf(frequency)
-                                        val nxt = if (idx == -1 || idx == freqs.size - 1) 0 else idx + 1
-                                        frequency = freqs[nxt]
-                                    },
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                Text(frequency, modifier = Modifier.padding(start = 12.dp), fontSize = 13.sp)
-                            }
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(10.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { showAddDialog = false },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Cancel")
-                        }
-                        Button(
-                            onClick = {
-                                val amtNum = amount.toDoubleOrNull() ?: 0.0
-                                val dueDaysNum = dueDays.toIntOrNull() ?: 5
-                                if (title.isNotBlank() && amtNum > 0.0) {
-                                    viewModel.addRecurringReminder(
-                                        title,
-                                        amtNum,
-                                        category,
-                                        frequency,
-                                        dueDaysNum
-                                    )
-                                    showAddDialog = false
+                                Text(
+                                    text = receipt.paymentMethod,
+                                    color = ForestGreen,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 13.sp
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .background(Color(0xFFE2F3EB), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = "Success",
+                                            tint = Color(0xFF137333),
+                                            modifier = Modifier.size(11.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(receipt.status, color = Color(0xFF137333), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                    }
                                 }
-                            },
-                            modifier = Modifier.weight(1f).testTag("save_reminder_btn"),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                        ) {
-                            Text("Save Reminder")
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Text(
+                                text = receipt.productTitle,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${"%,.2f".format(receipt.amountPaid)} GHS",
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 18.sp,
+                                    color = Terracotta
+                                )
+                                Text(
+                                    text = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(receipt.date)),
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+                            Row {
+                                Text("Ref: ", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                                Text(receipt.transactionRef, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Row {
+                                Text("Buyer Details: ", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                                Text("${receipt.buyerName} (${receipt.buyerContact})", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -1759,545 +1857,1565 @@ fun RemindersScreen(viewModel: FinanceViewModel) {
     }
 }
 
-// ==================== SCREEN 4: PRIVACY, 2FA LOCK, CLOUD SYNC ====================
+// ============================================
+// PROFILE / AUTH SCREEN (My Hub)
+// ============================================
 @Composable
-fun SecurityScreen(viewModel: FinanceViewModel) {
-    val securityConfig by viewModel.securityConfig.collectAsState()
-    val isCloudSyncing by viewModel.isCloudSyncing.collectAsState()
-    val is2FAVerifying by viewModel.isTwoFactorVerifying.collectAsState()
-    
-    var emailInput by remember { mutableStateOf("") }
-    var showPinSetup by remember { mutableStateOf(false) }
-    var otpInput by remember { mutableStateOf("") }
-    
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp)
-    ) {
-        
-        // PRIVACY STATEMENT BANNER
-        item {
+fun ProfileHubScreen(viewModel: FinanceViewModel) {
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
+    val authError by viewModel.authError.collectAsStateWithLifecycle()
+
+    var nameVal by remember { mutableStateOf("") }
+    var idVal by remember { mutableStateOf("") }
+    var momoRegisteredVal by remember { mutableStateOf("") }
+
+    var signUpTab by remember { mutableStateOf("Phone") }
+
+    if (currentUser == null) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(20.dp)
+                .testTag("login_screen_hub"),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Row(
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                JmarketLogo(modifier = Modifier.size(38.dp))
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Welcome to Jmarket",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = ForestGreen
+                )
+            }
+            Text(
+                text = "Sign in to list items, negotiate with buyers, and process payments securely in Ghana",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.outline,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp, horizontal = 12.dp)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            TabRow(
+                selectedTabIndex = when (signUpTab) {
+                    "Phone" -> 0
+                    "Email" -> 1
+                    else -> 2
+                }
+            ) {
+                Tab(
+                    selected = signUpTab == "Phone",
+                    onClick = { signUpTab = "Phone" },
+                    text = { Text("Phone", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+                    modifier = Modifier.testTag("tab_login_phone")
+                )
+                Tab(
+                    selected = signUpTab == "Email",
+                    onClick = { signUpTab = "Email" },
+                    text = { Text("Email", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+                    modifier = Modifier.testTag("tab_login_email")
+                )
+                Tab(
+                    selected = signUpTab == "Google",
+                    onClick = { signUpTab = "Google" },
+                    text = { Text("Google Direct", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+                    modifier = Modifier.testTag("tab_login_google")
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = nameVal,
+                    onValueChange = { nameVal = it },
+                    label = { Text("Full Name / Store Name") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("reg_name_input"),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SavannahGold)
+                )
+
+                when (signUpTab) {
+                    "Phone" -> {
+                        OutlinedTextField(
+                            value = idVal,
+                            onValueChange = { idVal = it },
+                            label = { Text("Ghana Mobile Number") },
+                            placeholder = { Text("e.g. 0241234567") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("reg_phone_input"),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SavannahGold)
+                        )
+                    }
+                    "Email" -> {
+                        OutlinedTextField(
+                            value = idVal,
+                            onValueChange = { idVal = it },
+                            label = { Text("Email Address") },
+                            placeholder = { Text("e.g. seller@ghanamail.com") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("reg_email_input"),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SavannahGold)
+                        )
+                    }
+                    "Google" -> {
+                        OutlinedTextField(
+                            value = idVal,
+                            onValueChange = { idVal = it },
+                            label = { Text("Instant Gmail Address") },
+                            placeholder = { Text("e.g. yourname@gmail.com") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("reg_gmail_input"),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SavannahGold)
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = momoRegisteredVal,
+                    onValueChange = { momoRegisteredVal = it },
+                    label = { Text("Registered MoMo Wallet Carrier (Optional)") },
+                    placeholder = { Text("e.g. 0241234567 (MTN MoMo)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SavannahGold)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            authError?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            Button(
+                onClick = {
+                    viewModel.loginOrSignUp(
+                        name = nameVal,
+                        identifier = idVal,
+                        method = signUpTab,
+                        phoneVal = if (signUpTab == "Phone") idVal else "",
+                        emailVal = if (signUpTab == "Email" || signUpTab == "Google") idVal else ""
+                    )
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .testTag("register_user_btn"),
+                colors = ButtonDefaults.buttonColors(containerColor = RegularGreen),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Confirm & Direct Sign In", fontSize = 14.sp)
+            }
+        }
+    } else {
+        val user = currentUser ?: return
+        val productsList by viewModel.products.collectAsStateWithLifecycle()
+        val userAdsCount = productsList.count { it.sellerId == user.id }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(20.dp)
+                .testTag("profile_hub_active")
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(60.dp)
+                        .background(ForestGreen, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        user.name.take(1).uppercase(),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 28.sp,
+                        color = Color.White
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(user.name, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text("P2P Member since 2026", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(0.04f))
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceAround
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(36.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = "Zero-Knowledge Local Storage",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "All ledger files, keys, and details are kept in your localized encrypted database context. Total Privacy Assured.",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                            lineHeight = 15.sp
-                        )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(userAdsCount.toString(), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = ForestGreen)
+                        Text("Active Ads", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Ghana GHS", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = SavannahGold, modifier = Modifier.padding(top = 6.dp))
+                        Text("Local Currency", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(user.contactMethod, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ForestGreen, modifier = Modifier.padding(top = 6.dp))
+                        Text("Auth Provider", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
                     }
                 }
             }
-        }
-        
-        // MASTER PIN PRIVACY SHIELD SETTING
-        item {
-            val isPinActive = securityConfig?.isPinEnabled == true
-            
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Master PIN Authentication Lock",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Secures launching the tracker with a mandatory localized padlock",
-                        fontSize = 11.sp,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                    
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("Verification Records", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
+                    Row {
+                        Text("Email Address: ", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                        Text(user.email.ifEmpty { "Not bound" }, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Row {
+                        Text("Phone Number: ", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                        Text(user.phoneNumber.ifEmpty { "Not bound" }, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Row {
+                        Text("Default Shop Location: ", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                        Text(user.location, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = if (user.isVerified) RegularGreen.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant
+                ),
+                border = androidx.compose.foundation.BorderStroke(
+                    width = 1.dp,
+                    color = if (user.isVerified) RegularGreen else Color.Transparent
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("verification_control_card")
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        Icon(
+                            imageVector = if (user.isVerified) Icons.Default.CheckCircle else Icons.Default.Info,
+                            contentDescription = null,
+                            tint = if (user.isVerified) RegularGreen else SavannahGold,
+                            modifier = Modifier.size(20.dp)
+                        )
                         Text(
-                            text = if (isPinActive) "PADLOCK ENABLED" else "UNPROTECTED SECURED",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (isPinActive) IncomeColor else ExpenseColor
+                            text = if (user.isVerified) "Verified Trust Status" else "P2P Verification Required",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = if (user.isVerified) RegularGreen else MaterialTheme.colorScheme.onSurface
                         )
-                        
-                        Button(
-                            onClick = {
-                                if (isPinActive) {
-                                    viewModel.disablePIN()
-                                } else {
-                                    showPinSetup = true
-                                }
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.testTag("toggle_pin_lock_btn")
-                        ) {
-                            Text(if (isPinActive) "Disable PIN" else "Set Security PIN", fontSize = 12.sp)
-                        }
                     }
-                }
-            }
-        }
-        
-        // TWO-FACTOR AUTHENTICATION SETUP (DATA PROTECTION)
-        item {
-            val is2fActive = securityConfig?.isTwoFactorEnabled == true
-            
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Encrypted Two-Factor OTP Gateway",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Require visual OTP codes when requesting external cloud synchronizations",
-                        fontSize = 11.sp,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                    
-                    if (!is2fActive && !is2FAVerifying) {
-                        OutlinedTextField(
-                            value = emailInput,
-                            onValueChange = { emailInput = it },
-                            placeholder = { Text("Enter account email address") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth().testTag("tfa_email_field"),
-                            shape = RoundedCornerShape(10.dp),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
-                        )
-                        
-                        Spacer(modifier = Modifier.height(10.dp))
-                        
-                        Button(
-                            onClick = { viewModel.toggleTwoFactor(true, emailInput) },
-                            enabled = emailInput.isNotBlank() && emailInput.contains("@"),
-                            modifier = Modifier.align(Alignment.End).testTag("request_2fa_btn"),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text("Enable Two-Factor", fontSize = 12.sp)
-                        }
-                    } else if (is2FAVerifying) {
-                        // OTP verification form
-                        val challengeCode by viewModel.otpChallengeCode.collectAsState()
-                        
-                        Surface(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text(
-                                    text = "SIMULATED EMAIL INBOX MESSAGE:\nUse OTP code $challengeCode to confirm 2FA setup.",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    lineHeight = 15.sp
-                                )
-                            }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(10.dp))
-                        
-                        OutlinedTextField(
-                            value = otpInput,
-                            onValueChange = { otpInput = it },
-                            placeholder = { Text("Enter 6-digit OTP code") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth().testTag("tfa_otp_field"),
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        
-                        Spacer(modifier = Modifier.height(10.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            TextButton(onClick = { viewModel.cancelOTPVerification() }) {
-                                Text("Cancel")
-                            }
-                            Spacer(modifier = Modifier.weight(1f))
+
+                    if (user.isVerified) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "Status: SECURE PRO SELLER",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = RegularGreen
+                            )
+                            Text(
+                                text = "Method: ${user.verificationType}",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Text(
+                                text = "All your listed ads have also been automatically upgraded with premium green Verification badges to attract 4x more buyers.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
                             Button(
-                                onClick = {
-                                    val success = viewModel.verifySimulatedOTP(otpInput)
-                                    if (success) {
-                                        otpInput = ""
-                                        emailInput = ""
-                                    }
-                                },
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.testTag("verify_otp_btn")
+                                onClick = { viewModel.verifyUser("None") },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f)),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier
+                                    .height(26.dp)
+                                    .align(Alignment.End)
+                                    .testTag("revoke_verification_btn")
                             ) {
-                                Text("Verify Code")
+                                Text("Reset Verification", fontSize = 10.sp, color = MaterialTheme.colorScheme.error)
                             }
                         }
                     } else {
-                        // 2FA is active
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Check, "Active", tint = IncomeColor)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("2FA Gateway Configured!", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = IncomeColor)
-                            }
-                            
-                            TextButton(
-                                onClick = { viewModel.toggleTwoFactor(false, "") },
-                                colors = ButtonDefaults.textButtonColors(contentColor = ExpenseColor),
-                                modifier = Modifier.testTag("disable_2fa_btn")
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = "Get verified to unlock the premium green badge on all your listings. Verified listings receive 90% higher confidence rating from Ghanaian buyers.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text("Revoke 2FA")
+                                Card(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(70.dp)
+                                        .clickable { viewModel.verifyUser("Ghana Card Verified") }
+                                        .testTag("input_verify_ghana_card"),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, SavannahGold)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxSize().padding(8.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text("🇬🇭 Ghana Card", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text("National Registry", fontSize = 8.sp, color = MaterialTheme.colorScheme.outline)
+                                    }
+                                }
+
+                                Card(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(70.dp)
+                                        .clickable { viewModel.verifyUser("MoMo Identity Match") }
+                                        .testTag("input_verify_momo"),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, ForestGreen)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxSize().padding(8.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text("📱 MoMo Wallet", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text("Mobile Match", fontSize = 8.sp, color = MaterialTheme.colorScheme.outline)
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
-        }
-        
-        // SECURE CLOUD SYNCHRONIZATION (OFFLINE-FIRST)
-        item {
-            val isCloudActive = securityConfig?.isCloudSyncEnabled == true
-            val is2faEnabled = securityConfig?.isTwoFactorEnabled == true
-            
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Button(
+                onClick = { viewModel.logout() },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .testTag("logout_button")
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Text("Sign Out / Log Out", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+val RegularGreen = Color(0xFF2E7D32)
+
+// ============================================
+// MOBILE MONEY & CREDIT CARD PAYMENT DIALOG
+// ============================================
+@Composable
+fun PaymentCheckoutDialog(
+    product: Product,
+    viewModel: FinanceViewModel,
+    onDismiss: () -> Unit
+) {
+    val paymentProcessing by viewModel.paymentProcessing.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
+
+    var paymentType by remember { mutableStateOf("MoMo") }
+
+    var momoCarrier by remember { mutableStateOf("MTN MoMo") }
+    var momoNumber by remember { mutableStateOf(currentUser?.phoneNumber?.filter { it.isDigit() }?.takeLast(9)?.let { "0$it" } ?: "") }
+    var pinVal by remember { mutableStateOf("") }
+
+    var cardNumber by remember { mutableStateOf("") }
+    var cardExpiry by remember { mutableStateOf("") }
+    var cardCvv by remember { mutableStateOf("") }
+    var otpVal by remember { mutableStateOf("") }
+
+    var showPinChallenge by remember { mutableStateOf(false) }
+    var showOtpChallenge by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = { if (!paymentProcessing) onDismiss() }) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp)
+                .testTag("checkout_dialog_card"),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.background)
+        ) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Secure P2P Transaction", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = ForestGreen)
+                    if (!paymentProcessing) {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, contentDescription = "Close")
+                        }
+                    }
+                }
+
+                HorizontalDivider()
+
+                Text(
+                    text = "You are buying: ${product.title}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Price Amount:", fontSize = 13.sp, color = MaterialTheme.colorScheme.outline)
                     Text(
-                        text = "Secure Cloud Synchronization",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
+                        text = "${"%,.2f".format(product.price)} GHS",
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Terracotta,
+                        fontSize = 15.sp
                     )
-                    Text(
-                        text = "Uploads localized SQLite data into an encrypted vault (Requires 2FA if active)",
-                        fontSize = 11.sp,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = if (isCloudActive) "Last Synced" else "No Cloud Backups",
-                                fontSize = 11.sp,
-                                color = Color.Gray
+                }
+
+                if (!paymentProcessing && !showPinChallenge && !showOtpChallenge) {
+                    TabRow(selectedTabIndex = if (paymentType == "MoMo") 0 else 1) {
+                        Tab(
+                            selected = paymentType == "MoMo",
+                            onClick = { paymentType = "MoMo" },
+                            text = { Text("Mobile Money") }
+                        )
+                        Tab(
+                            selected = paymentType == "Card",
+                            onClick = { paymentType = "Card" },
+                            text = { Text("Bank Card") }
+                        )
+                    }
+
+                    if (paymentType == "MoMo") {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("Select Carrier Network", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf("MTN MoMo", "Telecel Cash", "AT Money").forEach { carrier ->
+                                    val isSelected = momoCarrier == carrier
+                                    Button(
+                                        onClick = { momoCarrier = carrier },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (isSelected) SavannahGold else MaterialTheme.colorScheme.surfaceVariant,
+                                            contentColor = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
+                                        ),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(34.dp)
+                                    ) {
+                                        Text(carrier, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(2.dp))
+
+                            OutlinedTextField(
+                                value = momoNumber,
+                                onValueChange = { momoNumber = it },
+                                label = { Text("Ghana MoMo Phone Number") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("checkout_momo_number")
                             )
-                            if (isCloudActive) {
-                                val lastSync = securityConfig?.lastSyncTimestamp ?: 0L
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = cardNumber,
+                                onValueChange = { cardNumber = it },
+                                label = { Text("Debit/Credit Card Number") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("checkout_card_number")
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(
+                                    value = cardExpiry,
+                                    onValueChange = { cardExpiry = it },
+                                    label = { Text("Expiry (MM/YY)") },
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                OutlinedTextField(
+                                    value = cardCvv,
+                                    onValueChange = { cardCvv = it },
+                                    label = { Text("CVV") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.weight(0.9f)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Button(
+                        onClick = {
+                            if (paymentType == "MoMo") {
+                                showPinChallenge = true
+                            } else {
+                                showOtpChallenge = true
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp)
+                            .testTag("pay_confirm_button")
+                    ) {
+                        Text("Initiate Secure Transfer", fontWeight = FontWeight.Bold)
+                    }
+                } else if (showPinChallenge) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(Icons.Default.Lock, contentDescription = "sec", modifier = Modifier.size(48.dp), tint = SavannahGold)
+                        Text(
+                            text = "Authorise $momoCarrier Debit",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = "A prompt has been sent to $momoNumber. Enter your 4-digit MoMo vault PIN to execute escrow transfer of ${"%.2f".format(product.price)} GHS.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.outline,
+                            textAlign = TextAlign.Center
+                        )
+                        OutlinedTextField(
+                            value = pinVal,
+                            onValueChange = { pinVal = it },
+                            label = { Text("Enter 4-digit PIN") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                            visualTransformation = PasswordVisualTransformation(),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .width(150.dp)
+                                .testTag("momo_pin_input"),
+                            textStyle = androidx.compose.ui.text.TextStyle(textAlign = TextAlign.Center),
+                            singleLine = true
+                        )
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                            Button(
+                                onClick = { showPinChallenge = false },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Cancel")
+                            }
+                            Button(
+                                onClick = {
+                                    showPinChallenge = false
+                                    viewModel.processPayment(
+                                        product = product,
+                                        buyerName = currentUser?.name ?: "Guest",
+                                        buyerContact = momoNumber,
+                                        paymentMethod = momoCarrier
+                                    )
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                                shape = RoundedCornerShape(8.dp),
+                                enabled = pinVal.length >= 4,
+                                modifier = Modifier
+                                    .weight(1.2f)
+                                    .testTag("momo_pin_submit_button")
+                            ) {
+                                Text("Confirm Transaction")
+                            }
+                        }
+                    }
+                } else if (showOtpChallenge) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(Icons.Default.Email, contentDescription = "sms", modifier = Modifier.size(48.dp), tint = ForestGreen)
+                        Text("3D Verified Secure Code", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(
+                            text = "Input the standard SMS 6-digit OTP passcode sent to your banking register line to complete payments.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.outline,
+                            textAlign = TextAlign.Center
+                        )
+                        OutlinedTextField(
+                            value = otpVal,
+                            onValueChange = { otpVal = it },
+                            label = { Text("SMS OTP Passcode") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .width(180.dp)
+                                .testTag("card_otp_input"),
+                            textStyle = androidx.compose.ui.text.TextStyle(textAlign = TextAlign.Center),
+                            singleLine = true
+                        )
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                            Button(
+                                onClick = { showOtpChallenge = false },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Cancel")
+                            }
+                            Button(
+                                onClick = {
+                                    showOtpChallenge = false
+                                    viewModel.processPayment(
+                                        product = product,
+                                        buyerName = currentUser?.name ?: "Guest",
+                                        buyerContact = "Card Ending " + cardNumber.takeLast(4),
+                                        paymentMethod = "Visa/Card"
+                                    )
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                                shape = RoundedCornerShape(8.dp),
+                                enabled = otpVal.isNotEmpty(),
+                                modifier = Modifier
+                                    .weight(1.2f)
+                                    .testTag("card_otp_submit_button")
+                            ) {
+                                Text("Authorize Debit")
+                            }
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = SavannahGold,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "Authorising Secure Escrow Channels...",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = "Connecting securely to Ghanaian payment gateway...",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DecorativeGhanaFlag(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val barH = h / 3f
+
+        drawRect(color = Color(0xFFCE1126), size = androidx.compose.ui.geometry.Size(w, barH))
+        drawRect(color = Color(0xFFFCD116), topLeft = androidx.compose.ui.geometry.Offset(0f, barH), size = androidx.compose.ui.geometry.Size(w, barH))
+        drawRect(color = Color(0xFF006B3F), topLeft = androidx.compose.ui.geometry.Offset(0f, barH * 2), size = androidx.compose.ui.geometry.Size(w, barH))
+
+        val starCenter = androidx.compose.ui.geometry.Offset(w / 2f, h / 2f)
+        val r = barH * 0.40f
+        drawCircle(
+            color = Color.Black,
+            center = starCenter,
+            radius = r,
+            style = Stroke(width = 2.dp.toPx())
+        )
+    }
+}
+
+@Composable
+fun JmarketLogo(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(Color(0xFF10B981), Color(0xFF047857))
+                ),
+                shape = RoundedCornerShape(10.dp)
+            )
+            .padding(4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            
+            // Draw shiny gold accent coin at bottom-right of safe area
+            drawCircle(
+                color = Color(0xFFFCD116),
+                radius = w * 0.20f,
+                center = androidx.compose.ui.geometry.Offset(w * 0.72f, h * 0.72f)
+            )
+            
+            // Draw logo "J"
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(w * 0.65f, h * 0.26f)
+                lineTo(w * 0.45f, h * 0.26f)
+                moveTo(w * 0.55f, h * 0.26f)
+                lineTo(w * 0.55f, h * 0.68f)
+                quadraticBezierTo(
+                    w * 0.55f, h * 0.85f,
+                    w * 0.42f, h * 0.85f
+                )
+                quadraticBezierTo(
+                    w * 0.28f, h * 0.85f,
+                    w * 0.28f, h * 0.72f
+                )
+            }
+            
+            drawPath(
+                path = path,
+                color = Color.White,
+                style = Stroke(
+                    width = w * 0.11f,
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                    join = androidx.compose.ui.graphics.StrokeJoin.Round
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun OfflineStatusBar(
+    isOffline: Boolean,
+    isSyncing: Boolean,
+    onToggleOffline: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isOffline) Color(0xFFFEF3C7) else Color(0xFFE6F4EA)
+        ),
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(
+                            color = if (isOffline) Color(0xFFD97706) else Color(0xFF137333),
+                            shape = CircleShape
+                        )
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = if (isOffline) "Offline Mode Active" else "Online (P2P Client)",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = if (isOffline) Color(0xFF92400E) else Color(0xFF137333)
+                    )
+                    Text(
+                        text = if (isOffline) "Saved offline inside Room DB" else "Sync active & responder online",
+                        fontSize = 9.sp,
+                        color = Color.DarkGray
+                    )
+                }
+            }
+            if (isSyncing) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 1.8.dp,
+                        color = Color(0xFF137333)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+						text = "Syncing...", 
+						fontSize = 10.sp, 
+						fontWeight = FontWeight.Bold, 
+						color = Color(0xFF137333),
+						modifier = Modifier.testTag("syncing_spin_text")
+					)
+                }
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .background(
+                            color = if (isOffline) Color(0xFFD97706) else Color(0xFF137333),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .clickable { onToggleOffline(!isOffline) }
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                        .testTag("toggle_offline_mode_btn")
+                ) {
+                    Icon(
+                        imageVector = if (isOffline) Icons.Default.Check else Icons.Default.Refresh,
+                        contentDescription = "Toggle connection",
+                        tint = Color.White,
+                        modifier = Modifier.size(10.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isOffline) "Go Live" else "Go Offline",
+                        color = Color.White,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ProductImagePage(
+    category: String,
+    imageIndex: Int,
+    imageIdSeed: Int,
+    modifier: Modifier = Modifier
+) {
+    val colors = when ((imageIdSeed + imageIndex) % 5) {
+        0 -> listOf(Color(0xFFE6D5B8), Color(0xFFC5A880)) // Sand Gold
+        1 -> listOf(Color(0xFF10B981), Color(0xFF047857)) // Forest Emerald
+        2 -> listOf(Color(0xFF3B82F6), Color(0xFF1D4ED8)) // Lagoon Blue
+        3 -> listOf(Color(0xFFF43F5E), Color(0xFFBE123C)) // Terracotta Rose
+        else -> listOf(Color(0xFF8B5CF6), Color(0xFF5B21B6)) // Royal Purple
+    }
+
+    Box(
+        modifier = modifier
+            .background(Brush.linearGradient(colors = colors)),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            drawCircle(
+                color = Color.White.copy(alpha = 0.08f),
+                radius = size.width * 0.45f,
+                center = androidx.compose.ui.geometry.Offset(size.width * 0.2f, size.height * 0.2f)
+            )
+            drawCircle(
+                color = Color.White.copy(alpha = 0.05f),
+                radius = size.width * 0.35f,
+                center = androidx.compose.ui.geometry.Offset(size.width * 0.8f, size.height * 0.8f)
+            )
+        }
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(16.dp)
+        ) {
+            val (icon, title, desc) = when (imageIndex) {
+                0 -> {
+                    val catIcon = when (category) {
+                        "Yam & Produce" -> Icons.Default.Home
+                        "Electronics & Phones" -> Icons.Default.Settings
+                        "Fashion & Apparel" -> Icons.Default.Star
+                        "Local Crafts & Cosmetics" -> Icons.Default.Person
+                        else -> Icons.Default.Home
+                    }
+                    Triple(catIcon, "Primary View", "100% Inspected & Direct P2P Listing")
+                }
+                1 -> {
+                    Triple(Icons.Default.Info, "Item Details", "Inspected condition, ready for hand-off")
+                }
+                2 -> {
+                    Triple(Icons.Default.Check, "Ghanaian Authentic", "Ghana local product registry guaranteed")
+                }
+                else -> {
+                    Triple(Icons.Default.Lock, "Secure Trade Badge", "Supports Mobile Money & Safe Escrow")
+                }
+            }
+
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(54.dp)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = title.uppercase(Locale.ROOT),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                color = Color.White.copy(alpha = 0.9f),
+                letterSpacing = 1.2.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = desc,
+                fontSize = 12.sp,
+                color = Color.White,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 12.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun ProductImageCarousel(
+    product: Product,
+    modifier: Modifier = Modifier
+) {
+    val indices = remember(product.extraImageIds) {
+        val parsed = product.extraImageIds.split(",")
+            .mapNotNull { it.trim().toIntOrNull() }
+        if (parsed.isEmpty()) listOf(0, 1, 2, 3) else parsed
+    }
+
+    var activeIndex by remember { mutableStateOf(0) }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(200.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .testTag("product_image_carousel_${product.id}")
+    ) {
+        val imageIdx = indices.getOrElse(activeIndex) { 0 }
+        ProductImagePage(
+            category = product.category,
+            imageIndex = imageIdx,
+            imageIdSeed = product.imageId,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        if (product.isPremium) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp)
+                    .background(PremiumGold, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Text("BOOSTED AD", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        if (indices.size > 1) {
+            IconButton(
+                onClick = {
+                    activeIndex = if (activeIndex == 0) indices.size - 1 else activeIndex - 1
+                },
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 8.dp)
+                    .background(Color.Black.copy(alpha = 0.35f), CircleShape)
+                    .size(36.dp)
+                    .testTag("carousel_prev_btn")
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Previous Image",
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            IconButton(
+                onClick = {
+                    activeIndex = if (activeIndex == indices.size - 1) 0 else activeIndex + 1
+                },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 8.dp)
+                    .background(Color.Black.copy(alpha = 0.35f), CircleShape)
+                    .size(36.dp)
+                    .testTag("carousel_next_btn")
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Next Image",
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp).rotate(180f)
+                )
+            }
+        }
+
+        if (indices.size > 1) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 12.dp)
+                    .background(Color.Black.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                indices.indices.forEach { index ->
+                    val isSelected = index == activeIndex
+                    Box(
+                        modifier = Modifier
+                            .size(if (isSelected) 8.dp else 6.dp)
+                            .background(
+                                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.5f),
+                                shape = CircleShape
+                            )
+                            .clickable { activeIndex = index }
+                            .testTag("carousel_dot_$index")
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SellerProfileReviewsDialog(
+    sellerId: String,
+    sellerName: String,
+    sellerVerificationBadge: String,
+    isSellerVerified: Boolean,
+    viewModel: FinanceViewModel,
+    onDismiss: () -> Unit
+) {
+    val reviewsList by viewModel.reviews.collectAsStateWithLifecycle()
+    val sellerReviews = reviewsList.filter { it.sellerId == sellerId }
+    val averageRating = if (sellerReviews.isNotEmpty()) sellerReviews.map { it.rating }.average() else 0.0
+    val totalReviews = sellerReviews.size
+
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
+
+    var ratingSelected by remember { mutableStateOf(5) }
+    var reviewTextState by remember { mutableStateOf("") }
+    var submitSuccess by remember { mutableStateOf(false) }
+    var submitError by remember { mutableStateOf("") }
+
+    val count5 = sellerReviews.count { it.rating == 5 }
+    val count4 = sellerReviews.count { it.rating == 4 }
+    val count3 = sellerReviews.count { it.rating == 3 }
+    val count2 = sellerReviews.count { it.rating == 2 }
+    val count1 = sellerReviews.count { it.rating == 1 }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.background),
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.9f)
+                .testTag("seller_profile_dialog_card")
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+            ) {
+                // Header (Title & Close Button)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Seller Trust Profile",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.testTag("seller_profile_title")
+                    )
+                    IconButton(onClick = onDismiss, modifier = Modifier.testTag("close_seller_profile_dialog")) {
+                        Icon(Icons.Default.Close, contentDescription = "Close Detail Sheet")
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Profile Header Detail Card
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth().testTag("seller_profile_info_card")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .background(SavannahGold, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = sellerName.take(1).uppercase(),
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 18.sp,
+                                        color = Color.Black
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = sellerName,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (isSellerVerified) {
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = "Verified",
+                                                tint = RegularGreen,
+                                                modifier = Modifier.size(16.dp).testTag("dialog_seller_verified_badge")
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (isSellerVerified) {
+                                            "Status: " + if (sellerVerificationBadge.isNotEmpty()) sellerVerificationBadge else "Verified Merchant"
+                                        } else {
+                                            "Status: Self-Declared Account (Not Verified)"
+                                        },
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (isSellerVerified) RegularGreen else Color.Gray,
+                                        modifier = Modifier.testTag("dialog_seller_status_badge")
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Rating Summary Card
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                            modifier = Modifier.fillMaxWidth().testTag("seller_profile_rating_distribution_card")
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
                                 Text(
-                                    text = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(lastSync)),
+                                    text = "Reputation & Trust Score",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
                                 )
-                            }
-                        }
-                        
-                        Button(
-                            onClick = { viewModel.triggerSecureCloudSync() },
-                            enabled = !isCloudSyncing,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.testTag("cloud_sync_now_btn")
-                        ) {
-                            if (isCloudSyncing) {
-                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(12.dp))
-                            } else {
-                                Text("Sync Ledger Cloud", fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    // --- PIN LOCK CONFIG DESIGN SELECTOR POPUP ---
-    if (showPinSetup) {
-        var pin1 by remember { mutableStateOf("") }
-        
-        Dialog(onDismissRequest = { showPinSetup = false }) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(28.dp))
-                    .border(width = 1.dp, color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(28.dp)),
-                color = MaterialTheme.colorScheme.surface
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "Set Security Padlock PIN",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
-                    Text(
-                        text = "Please enter 4 digits to lock your local database access.",
-                        fontSize = 12.sp,
-                        color = Color.Gray
-                    )
-                    
-                    OutlinedTextField(
-                        value = pin1,
-                        onValueChange = { if (it.length <= 4) pin1 = it },
-                        placeholder = { Text("4 Digits Code") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth().testTag("setup_pin_field"),
-                        singleLine = true
-                    )
-                    
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { showPinSetup = false },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Cancel")
-                        }
-                        
-                        Button(
-                            onClick = {
-                                if (pin1.length == 4) {
-                                    // Submit digits one by one to simulate matrix entries
-                                    pin1.forEach { char ->
-                                        viewModel.handlePINKey(char.toString())
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text(
+                                            text = if (totalReviews > 0) "%.1f".format(averageRating) else "0.0",
+                                            fontSize = 32.sp,
+                                            fontWeight = FontWeight.Black,
+                                            color = Terracotta,
+                                            modifier = Modifier.testTag("dialog_average_score")
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            repeat(5) { index ->
+                                                val isFilled = index < averageRating.toInt()
+                                                Icon(
+                                                    imageVector = Icons.Default.Star,
+                                                    contentDescription = null,
+                                                    tint = if (isFilled) SavannahGold else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "$totalReviews Feedbacks",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.outline,
+                                            modifier = Modifier.testTag("dialog_feedbacks_count")
+                                        )
                                     }
-                                    showPinSetup = false
+
+                                    Spacer(modifier = Modifier.width(16.dp))
+
+                                    Column(
+                                        modifier = Modifier.weight(1.8f),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                         listOf(
+                                             5 to count5,
+                                             4 to count4,
+                                             3 to count3,
+                                             2 to count2,
+                                             1 to count1
+                                         ).forEach { (star, count) ->
+                                             Row(
+                                                 verticalAlignment = Alignment.CenterVertically,
+                                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                 modifier = Modifier.fillMaxWidth().testTag("rating_bar_row_$star")
+                                             ) {
+                                                 Text("${star}★", fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(14.dp))
+                                                 val ratio = if (totalReviews > 0) count.toFloat() / totalReviews else 0f
+                                                 Box(
+                                                     modifier = Modifier
+                                                         .weight(1f)
+                                                         .height(6.dp)
+                                                         .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f), RoundedCornerShape(3.dp))
+                                                 ) {
+                                                     Box(
+                                                         modifier = Modifier
+                                                             .fillMaxHeight()
+                                                             .fillMaxWidth(ratio)
+                                                             .background(SavannahGold, RoundedCornerShape(3.dp))
+                                                     )
+                                                 }
+                                                 Text(
+                                                     text = "${count}",
+                                                     fontSize = 10.sp,
+                                                     color = MaterialTheme.colorScheme.outline,
+                                                     modifier = Modifier.width(15.dp),
+                                                     textAlign = TextAlign.End
+                                                 )
+                                             }
+                                         }
+                                    }
                                 }
-                            },
-                            enabled = pin1.length == 4,
-                            modifier = Modifier.weight(1f).testTag("confirm_pin_btn")
+                            }
+                        }
+                    }
+
+                    // Reviews List
+                    item {
+                        Text(
+                            text = "Reviews From Ghanaian Buyers ($totalReviews)",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+
+                    if (sellerReviews.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "No reviews yet. Be the first to transact and review!",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray,
+                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                                )
+                            }
+                        }
+                    } else {
+                        items(sellerReviews.size) { index ->
+                            val review = sellerReviews[index]
+                            Card(
+                                modifier = Modifier.fillMaxWidth().testTag("review_card_$index"),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = review.buyerName,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Row {
+                                            repeat(5) { starIndex ->
+                                                val isFilled = starIndex < review.rating
+                                                Icon(
+                                                    imageVector = Icons.Default.Star,
+                                                    contentDescription = null,
+                                                    tint = if (isFilled) SavannahGold else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                                                    modifier = Modifier.size(11.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = review.reviewText,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    val dateText = android.text.format.DateFormat.format("MMM dd, yyyy", review.timestamp).toString()
+                                    Text(
+                                        text = dateText,
+                                        fontSize = 9.sp,
+                                        color = Color.Gray,
+                                        modifier = Modifier.align(Alignment.End)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Submit feedback form
+                    item {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    }
+
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color.Gray.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                                .padding(12.dp)
                         ) {
-                            Text("Confirm PIN")
+                            Text(
+                                text = "Submit Trusted Feedback",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.testTag("submit_feedback_title")
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            if (currentUser == null) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp)
+                                        .background(SavannahGold.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                        .padding(10.dp)
+                                        .testTag("review_locked_message")
+                                ) {
+                                    Text(
+                                        text = "🔒 Review Locked. Please log in first on the Profile page to leave ratings for this seller.",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF886A00)
+                                    )
+                                }
+                            } else if (currentUser?.id == sellerId) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp)
+                                        .background(Color.Gray.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                        .padding(10.dp)
+                                        .testTag("review_self_message")
+                                ) {
+                                    Text(
+                                        text = "ℹ️ You cannot leave a rating review on your own seller profile.",
+                                        fontSize = 11.sp,
+                                        color = Color.Gray,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            } else {
+                                if (submitSuccess) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp)
+                                            .background(RegularGreen.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                                            .padding(10.dp)
+                                            .testTag("review_submission_success_banner")
+                                    ) {
+                                        Column {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = RegularGreen, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = "Review submitted successfully!",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = ForestGreen
+                                                )
+                                            }
+                                            Text(
+                                                text = "Thank you for supporting community trust in the P2P marketplace.",
+                                                fontSize = 11.sp,
+                                                modifier = Modifier.padding(top = 2.dp)
+                                            )
+                                            TextButton(
+                                                onClick = { submitSuccess = false },
+                                                contentPadding = PaddingValues(0.dp),
+                                                modifier = Modifier.height(24.dp).testTag("dismiss_success_review_btn")
+                                            ) {
+                                                Text("Submit another review", fontSize = 10.sp, color = ForestGreen)
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Text("Select Rating Score:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth().testTag("interactive_rating_stars_row")
+                                    ) {
+                                        repeat(5) { index ->
+                                            val starValue = index + 1
+                                            val isFilled = starValue <= ratingSelected
+                                            IconButton(
+                                                onClick = {
+                                                    ratingSelected = starValue
+                                                },
+                                                modifier = Modifier
+                                                    .size(36.dp)
+                                                    .testTag("star_select_$starValue")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Star,
+                                                    contentDescription = "$starValue Stars",
+                                                    tint = if (isFilled) SavannahGold else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+                                                    modifier = Modifier.size(28.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    OutlinedTextField(
+                                        value = reviewTextState,
+                                        onValueChange = {
+                                            reviewTextState = it
+                                            if (it.isNotEmpty()) submitError = ""
+                                        },
+                                        placeholder = { Text("Write about delivery speeds, yam quality, MoMo handling...", fontSize = 12.sp) },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(84.dp)
+                                            .testTag("review_input_field"),
+                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+
+                                    if (submitError.isNotEmpty()) {
+                                        Text(
+                                            text = submitError,
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.padding(top = 4.dp).testTag("review_text_validation_error")
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    Button(
+                                        onClick = {
+                                            if (reviewTextState.trim().isEmpty()) {
+                                                submitError = "Please write a constructive review description."
+                                            } else {
+                                                viewModel.submitReview(sellerId, ratingSelected, reviewTextState.trim())
+                                                reviewTextState = ""
+                                                ratingSelected = 5
+                                                submitSuccess = true
+                                                submitError = ""
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier
+                                            .align(Alignment.End)
+                                            .height(36.dp)
+                                            .testTag("submit_review_button")
+                                    ) {
+                                        Text("Submit Review", fontSize = 12.sp)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-    }
-}
-
-
-// ==================== DRAWING: monthly budget Bezier Curve ====================
-@Composable
-fun TrendBezierGraph(transactions: List<Transaction>) {
-    val strokeColor = MaterialTheme.colorScheme.primary
-    val isLight = !isSystemInDarkTheme()
-    
-    Canvas(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(vertical = 8.dp)
-    ) {
-        val width = size.width
-        val height = size.height
-        
-        // Draw helpful gridlines
-        val gridLines = 4
-        for (i in 0..gridLines) {
-            val y = (height / gridLines) * i
-            drawLine(
-                color = if (isLight) Color(0xFFE2E8F0) else Color(0xFF1E293B),
-                start = Offset(0f, y),
-                end = Offset(width, y),
-                strokeWidth = 1f
-            )
-        }
-        
-        if (transactions.isEmpty()) return@Canvas
-        
-        // Sort and map values around coordinates
-        val points = transactions.sortedBy { it.date }
-        val expensesOnly = points.filter { it.amount < 0 }
-        
-        if (expensesOnly.size < 2) {
-            // Draw simple flat coordinate path with some style
-            val path = Path().apply {
-                moveTo(0f, height * 0.7f)
-                lineTo(width, height * 0.3f)
-            }
-            drawPath(path, color = strokeColor, style = Stroke(width = 6f))
-            return@Canvas
-        }
-        
-        val maxExpenseVal = expensesOnly.maxOf { Math.abs(it.amount) }.toFloat()
-        val minExpenseVal = expensesOnly.minOf { Math.abs(it.amount) }.toFloat()
-        val deltaExpense = (maxExpenseVal - minExpenseVal).coerceAtLeast(1f)
-        
-        val stepX = width / (expensesOnly.size - 1)
-        val pathOfBezier = Path()
-        
-        expensesOnly.forEachIndexed { idx, tx ->
-            val currVal = Math.abs(tx.amount).toFloat()
-            // Map into bounds height
-            val fractionY = (currVal - minExpenseVal) / deltaExpense
-            val targetY = height - (fractionY * (height * 0.7f) + (height * 0.15f))
-            val targetX = idx * stepX
-            
-            if (idx == 0) {
-                pathOfBezier.moveTo(targetX, targetY)
-            } else {
-                val prevVal = Math.abs(expensesOnly[idx - 1].amount).toFloat()
-                val prevFracY = (prevVal - minExpenseVal) / deltaExpense
-                val prevY = height - (prevFracY * (height * 0.7f) + (height * 0.15f))
-                val prevX = (idx - 1) * stepX
-                
-                // Control handles for smooth bezier curve
-                val controlX1 = prevX + (stepX / 2f)
-                val controlY1 = prevY
-                val controlX2 = prevX + (stepX / 2f)
-                val controlY2 = targetY
-                
-                pathOfBezier.cubicTo(controlX1, controlY1, controlX2, controlY2, targetX, targetY)
-            }
-        }
-        
-        drawPath(
-            path = pathOfBezier,
-            color = strokeColor,
-            style = Stroke(width = 5f)
-        )
-        
-        // Fill area below trend with dynamic visual gradient
-        val fillOfPath = Path().apply {
-            addPath(pathOfBezier)
-            lineTo(width, height)
-            lineTo(0f, height)
-            close()
-        }
-        
-        drawPath(
-            path = fillOfPath,
-            brush = Brush.verticalGradient(
-                colors = listOf(
-                    strokeColor.copy(alpha = 0.25f),
-                    Color.Transparent
-                )
-            )
-        )
-    }
-}
-
-
-// ==================== DRAWING: Category Proportions Donut Chart ====================
-@Composable
-fun CategoryDonutChart(transactions: List<Transaction>, categories: List<CustomCategory>) {
-    val spentRecords = transactions.filter { it.amount < 0 }
-    val totalExpenseSum = spentRecords.sumOf { Math.abs(it.amount) }
-    
-    val isLight = !isSystemInDarkTheme()
-    
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val sizeSide = Math.min(size.width, size.height)
-        val rectBounds = Size(sizeSide, sizeSide)
-        val offsetCenter = Offset((size.width - sizeSide) / 2f, (size.height - sizeSide) / 2f)
-        
-        if (totalExpenseSum == 0.0) {
-            drawArc(
-                color = if (isLight) Color(0xFFE2E8F0) else Color(0xFF334155),
-                startAngle = 0f,
-                sweepAngle = 360f,
-                useCenter = false,
-                style = Stroke(width = 24f),
-                topLeft = offsetCenter,
-                size = rectBounds
-            )
-            return@Canvas
-        }
-        
-        val aggregations = spentRecords
-            .groupBy { it.category }
-            .mapValues { Math.abs(it.value.sumOf { tx -> tx.amount }) }
-        
-        var cumulativeAngle = -90f
-        aggregations.forEach { (catName, amt) ->
-            val ratio = (amt / totalExpenseSum).toFloat()
-            val sweepAngle = ratio * 360f
-            
-            val catMeta = categories.find { it.name == catName }
-            val colorHex = catMeta?.colorHex ?: "#94A3B8"
-            val parsedColor = Color(android.graphics.Color.parseColor(colorHex))
-            
-            drawArc(
-                color = parsedColor,
-                startAngle = cumulativeAngle,
-                sweepAngle = sweepAngle,
-                useCenter = false,
-                style = Stroke(width = 24f),
-                topLeft = offsetCenter,
-                size = rectBounds
-            )
-            cumulativeAngle += sweepAngle
-        }
-    }
-}
-
-
-// --- HELPERS & COMPATIBILITY LAYER ---
-fun formatCurrency(amount: Double): String {
-    val cleaner = amount.coerceIn(-1_000_000.0, 1_000_000.0)
-    val formatter = NumberFormat.getCurrencyInstance(Locale.US)
-    return formatter.format(cleaner)
-}
-
-fun getCleanCategoryEmoji(catName: String): String {
-    return when {
-        catName.contains("Food", ignoreCase = true) -> "🍔"
-        catName.contains("Rent", ignoreCase = true) -> "🏠"
-        catName.contains("Transport", ignoreCase = true) -> "🚗"
-        catName.contains("Utility", ignoreCase = true) -> "💡"
-        catName.contains("Entertainment", ignoreCase = true) -> "🎮"
-        catName.contains("Shopping", ignoreCase = true) -> "🛍️"
-        catName.contains("Healthcare", ignoreCase = true) -> "🩺"
-        catName.contains("Income", ignoreCase = true) -> "💵"
-        else -> "📝"
     }
 }

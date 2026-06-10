@@ -9,77 +9,81 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
-interface FinanceDao {
-    // --- Transactions ---
-    @Query("SELECT * FROM transactions ORDER BY date DESC")
-    fun getAllTransactions(): Flow<List<Transaction>>
+interface MarketplaceDao {
+    // --- Products (Buying & Selling Listings) ---
+    @Query("SELECT * FROM products ORDER BY isPremium DESC, createdAt DESC")
+    fun getAllProducts(): Flow<List<Product>>
+
+    @Query("SELECT * FROM products WHERE category = :category ORDER BY isPremium DESC, createdAt DESC")
+    fun getProductsByCategory(category: String): Flow<List<Product>>
+
+    @Query("SELECT * FROM products WHERE id = :id LIMIT 1")
+    fun getProductById(id: Int): Flow<Product?>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTransaction(transaction: Transaction)
+    suspend fun insertProduct(product: Product)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTransactions(transactions: List<Transaction>)
+    @Update
+    suspend fun updateProduct(product: Product)
 
     @Delete
-    suspend fun deleteTransaction(transaction: Transaction)
+    suspend fun deleteProduct(product: Product)
 
-    @Query("DELETE FROM transactions")
-    suspend fun clearAllTransactions()
+    @Query("DELETE FROM products")
+    suspend fun clearAllProducts()
 
-    // --- Custom Categories ---
-    @Query("SELECT * FROM custom_categories")
-    fun getAllCategories(): Flow<List<CustomCategory>>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertCategory(category: CustomCategory)
-
-    @Delete
-    suspend fun deleteCategory(category: CustomCategory)
-
-    // --- Recurring Reminders ---
-    @Query("SELECT * FROM recurring_reminders ORDER BY nextDueDate ASC")
-    fun getAllReminders(): Flow<List<RecurringReminder>>
+    // --- Users (Sellers / Buyers) ---
+    @Query("SELECT * FROM marketplace_users WHERE id = :id LIMIT 1")
+    fun getUserById(id: String): Flow<User?>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertReminder(reminder: RecurringReminder)
+    suspend fun insertUser(user: User)
 
-    @Delete
-    suspend fun deleteReminder(reminder: RecurringReminder)
+    // --- Chat Messages (P2P Negotiations) ---
+    @Query("SELECT * FROM chat_messages ORDER BY timestamp ASC")
+    fun getAllMessages(): Flow<List<ChatMessage>>
 
-    // --- Security Config ---
-    @Query("SELECT * FROM security_config WHERE id = 1 LIMIT 1")
-    fun getSecurityConfig(): Flow<SecurityConfig?>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertSecurityConfig(config: SecurityConfig)
-
-    // --- Bills ---
-    @Query("SELECT * FROM bills ORDER BY dueDate ASC")
-    fun getAllBills(): Flow<List<Bill>>
+    @Query("SELECT * FROM chat_messages WHERE productId = :productId ORDER BY timestamp ASC")
+    fun getMessagesForProduct(productId: Int): Flow<List<ChatMessage>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertBill(bill: Bill)
+    suspend fun insertMessage(message: ChatMessage)
 
-    @Delete
-    suspend fun deleteBill(bill: Bill)
+    // --- Payment Receipts ---
+    @Query("SELECT * FROM payment_receipts ORDER BY date DESC")
+    fun getAllReceipts(): Flow<List<PaymentReceipt>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertReceipt(receipt: PaymentReceipt)
+
+    // --- Seller Reviews & Star Ratings ---
+    @Query("SELECT * FROM seller_reviews ORDER BY timestamp DESC")
+    fun getAllReviews(): Flow<List<SellerReview>>
+
+    @Query("SELECT * FROM seller_reviews WHERE sellerId = :sellerId ORDER BY timestamp DESC")
+    fun getReviewsForSeller(sellerId: String): Flow<List<SellerReview>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertReview(review: SellerReview)
 }
 
 @Database(
     entities = [
-        Transaction::class,
-        CustomCategory::class,
-        RecurringReminder::class,
-        SecurityConfig::class,
-        Bill::class
+        User::class,
+        Product::class,
+        ChatMessage::class,
+        PaymentReceipt::class,
+        SellerReview::class
     ],
-    version = 2,
+    version = 7, // increment version for migration
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
-    abstract val financeDao: FinanceDao
+    abstract val marketplaceDao: MarketplaceDao
 
     companion object {
         @Volatile
@@ -90,7 +94,7 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "finance_tracker_db"
+                    "salaga_market_db"
                 )
                 .fallbackToDestructiveMigration()
                 .build()

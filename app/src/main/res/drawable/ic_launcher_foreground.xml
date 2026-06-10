@@ -4,25 +4,33 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Circular Shield Vault Frame -->
+    <!-- Outer Glowing Brand Hexagon Ring -->
     <path
-        android:pathData="M54,24 A30,30 0 1,1 53.999,24 Z"
-        android:strokeColor="#34D399"
-        android:strokeWidth="4"
-        android:strokeLineCap="round"
-        android:fillColor="#00000000" />
-    <!-- Diagonal Spoke Pins -->
-    <path
-        android:pathData="M54,12 L54,22 M54,86 L54,96 M12,54 L22,54 M86,54 L96,54"
+        android:pathData="M54,18 L85,36 L85,72 L54,90 L23,72 L23,36 Z"
         android:strokeColor="#10B981"
-        android:strokeWidth="4"
-        android:strokeLineCap="round"/>
-    <!-- Central Dollar Grid Symbol -->
-    <path
-        android:pathData="M54,34 L54,74 M46,42 C46,38 62,38 62,46 C62,54 46,50 46,58 C46,66 62,66 62,62"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="5.5"
+        android:strokeWidth="4.5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
         android:fillColor="#00000000" />
+    
+    <!-- Decorative Tech/Market Nodes -->
+    <path
+        android:pathData="M54,14 L54,18 M85,36 L89,34 M85,72 L89,74 M54,90 L54,94 M23,72 L19,74 M23,36 L19,34"
+        android:strokeColor="#34D399"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round" />
+
+    <!-- Stylized J Symbol intersecting with Jmarket Trade Circle -->
+    <path
+        android:pathData="M64,38 L48,38 M56,38 L56,66 C56,71 51,75 46,75 C41,75 38,72 37,67"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="6.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+
+    <!-- Savannah Gold P2P Trade Accent Dot/Coin -->
+    <path
+        android:pathData="M66,62 A6,6 0 1,1 65.999,62 Z"
+        android:fillColor="#FCD116" />
 </vector>

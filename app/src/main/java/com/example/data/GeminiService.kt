@@ -79,92 +79,60 @@ object RetrofitClient {
 class GeminiService {
     private val apiKey: String = BuildConfig.GEMINI_API_KEY
 
-    suspend fun getCategorization(description: String, categories: List<String>): String {
+    /**
+     * Generates a polished, highly-engaging product description (Jiji style) for Ghana sellers.
+     */
+    suspend fun generateProductDescription(
+        title: String,
+        category: String,
+        location: String,
+        details: String
+    ): String {
         if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
-            return fallbackCategorization(description, categories)
+            return fallbackDescription(title, category, location, details)
         }
 
         val prompt = """
-            Given the transaction description: "$description"
-            And the list of available spending categories: ${categories.joinToString(", ")}
-            Choose the single matching category that best fits this transaction.
-            Return ONLY the exact name of the category, with no extra text, punctuation, or reasoning.
+            You are an expert copywriter for P2P trading platforms in Ghana (similar to Jiji.com.gh).
+            Generate a detailed, attractive, and polished product description for:
+            - Product Title: "$title"
+            - Category: "$category"
+            - Seller Location: "$location"
+            - Bullet Points/Key Details: "$details"
+
+            The ad should:
+            1. Sound authentic, professional, and trustworthy.
+            2. Be optimized for Ghanaian buyers. Mention local context if relevant (e.g., location $location and standard local currencies GHS).
+            3. Highlight safety notes concisely at the physical meetup (e.g., check the item before paying, use Mobile Money MTN MoMo/Telecel Cash/AT Money securely, or pay with card inside the app).
+            
+            Keep the response structured and easy to scan using standard clear paragraphs. Keep it under 150 words.
         """.trimIndent()
 
         val request = GeminiRequest(
             contents = listOf(
                 GeminiContent(parts = listOf(GeminiPart(text = prompt)))
             ),
-            generationConfig = GeminiGenerationConfig(temperature = 0.1)
+            generationConfig = GeminiGenerationConfig(temperature = 0.7)
         )
 
         return try {
             val response = RetrofitClient.service.generateContent(apiKey, request)
-            val result = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
-            if (!result.isNullOrEmpty() && categories.any { it.equals(result, ignoreCase = true) }) {
-                categories.first { it.equals(result, ignoreCase = true) }
-            } else {
-                fallbackCategorization(description, categories)
-            }
+            response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
+                ?: fallbackDescription(title, category, location, details)
         } catch (e: Exception) {
-            fallbackCategorization(description, categories)
+            fallbackDescription(title, category, location, details)
         }
     }
 
-    suspend fun getFinancialInsights(transactions: List<Transaction>, categories: List<CustomCategory>): String {
-        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
-            return "Please configure your GEMINI_API_KEY in the Secrets panel to activate personalized AI-powered financial coaching, spending trend analysis, and monthly budgeting recommendations."
-        }
-
-        val txData = transactions.joinToString("\n") { tx ->
-            "Amount: ${tx.amount}, Desc: ${tx.description}, Category: ${tx.category}, Date: ${tx.date}"
-        }
-
-        val prompt = """
-            You are an expert personal financial advisor and tracker assistant.
-            Analyze the following monthly list of transactions:
-            $txData
-
-            Provide a concise, motivating, and actionable breakdown of spending habits, monthly trends, and potential savings recommendations. Keep the analysis structure as:
-            1. Spending Summary (high-level overview of total income, spend, and net savings)
-            2. Category Callouts (unusual spend behaviors or top categories)
-            3. Privacy & Offline tips (praising the offline & security setup of this app)
-            Keep it clean and easy to scan using standard Markdown. Do not include excessive details. Limit to 3 short paragraphs / bullet sections.
+    private fun fallbackDescription(title: String, category: String, location: String, details: String): String {
+        return """
+            Excellent selling $title based in $location!
+            
+            Details: $details
+            - Category: $category
+            - Location: $location
+            
+            Safety Tips: Meet the seller in a secure public place or a well-known landmark. Inspect and verify the item fully before making any payment. Supports Mobile Money (MTN MoMo, Telecel Cash, AT Money) and Credit cards.
         """.trimIndent()
-
-        val request = GeminiRequest(
-            contents = listOf(
-                GeminiContent(parts = listOf(GeminiPart(text = prompt)))
-            ),
-            generationConfig = GeminiGenerationConfig(temperature = 0.5)
-        )
-
-        return try {
-            val response = RetrofitClient.service.generateContent(apiKey, request)
-            response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: "Insights temporarily unavailable. Please retry shortly."
-        } catch (e: Exception) {
-            "Expert analysis connection interrupted: ${e.message}"
-        }
-    }
-
-    private fun fallbackCategorization(description: String, categories: List<String>): String {
-        val desc = description.lowercase()
-        return when {
-            desc.contains("payroll") || desc.contains("salary") || desc.contains("deposit") || desc.contains("income") -> 
-                categories.find { it.contains("Income", ignoreCase = true) } ?: categories.first()
-            desc.contains("starbucks") || desc.contains("coffee") || desc.contains("mcdonald") || desc.contains("restaurant") || desc.contains("food") || desc.contains("cafe") || desc.contains("bites") -> 
-                categories.find { it.contains("Food", ignoreCase = true) } ?: categories.first()
-            desc.contains("uber") || desc.contains("gas") || desc.contains("chevron") || desc.contains("shell") || desc.contains("car") || desc.contains("transit") -> 
-                categories.find { it.contains("Transport", ignoreCase = true) } ?: categories.first()
-            desc.contains("netflix") || desc.contains("hulu") || desc.contains("spotify") || desc.contains("game") || desc.contains("cinema") || desc.contains("movie") -> 
-                categories.find { it.contains("Entertainment", ignoreCase = true) } ?: categories.first()
-            desc.contains("comcast") || desc.contains("electric") || desc.contains("power") || desc.contains("water") || desc.contains("bill") -> 
-                categories.find { it.contains("Utilities", ignoreCase = true) } ?: categories.first()
-            desc.contains("rent") || desc.contains("house") || desc.contains("apartment") || desc.contains("mortgage") -> 
-                categories.find { it.contains("Rent", ignoreCase = true) } ?: categories.first()
-            desc.contains("amazon") || desc.contains("target") || desc.contains("grocery") || desc.contains("store") || desc.contains("shopping") -> 
-                categories.find { it.contains("Shopping", ignoreCase = true) } ?: categories.first()
-            else -> categories.first()
-        }
     }
 }

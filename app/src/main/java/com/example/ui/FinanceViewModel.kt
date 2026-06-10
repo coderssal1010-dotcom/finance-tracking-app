@@ -1,460 +1,432 @@
 package com.example.ui
 
 import android.app.Application
-import android.content.Context
-import android.net.Uri
-import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.*
+import java.util.UUID
 
 class FinanceViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = AppDatabase.getDatabase(application)
-    private val repository = FinanceRepository(database.financeDao)
+    private val repository = MarketplaceRepository(database.marketplaceDao)
     private val geminiService = GeminiService()
 
-    // --- Core Database Flows ---
-    val transactions: StateFlow<List<Transaction>> = repository.allTransactions
+    // --- Database Flow Streams ---
+    val products: StateFlow<List<Product>> = repository.allProducts
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val categories: StateFlow<List<CustomCategory>> = repository.allCategories
+    val allMessages: StateFlow<List<ChatMessage>> = repository.allMessages
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val reminders: StateFlow<List<RecurringReminder>> = repository.allReminders
+    val receipts: StateFlow<List<PaymentReceipt>> = repository.allReceipts
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val bills: StateFlow<List<Bill>> = repository.allBills
+    val reviews: StateFlow<List<SellerReview>> = repository.allReviews
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val securityConfig: StateFlow<SecurityConfig?> = repository.securityConfig
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    // --- Authentication States ---
+    private val _currentUser = MutableStateFlow<User?>(null)
+    val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
 
-    // --- UI State Management ---
-    private val _currentTab = MutableStateFlow("Dashboard")
+    private val _authError = MutableStateFlow<String?>(null)
+    val authError: StateFlow<String?> = _authError.asStateFlow()
+
+    // --- Navigation & Filter States ---
+    private val _currentTab = MutableStateFlow("Browse")
     val currentTab: StateFlow<String> = _currentTab.asStateFlow()
 
-    // --- Interactive Bank Linking & Sync State ---
-    private val _linkedAccounts = MutableStateFlow(
-        listOf(
-            BankAccount("Chase Checking", "Checking", 4850.25, isLinked = true, lastSynced = System.currentTimeMillis()),
-            BankAccount("Fidelity Savings", "Savings", 12500.00, isLinked = true, lastSynced = System.currentTimeMillis() - 4 * 3600_000),
-            BankAccount("Amex Platinum", "Credit Card", -850.40, isLinked = false, lastSynced = 0L)
-        )
-    )
-    val linkedAccounts: StateFlow<List<BankAccount>> = _linkedAccounts.asStateFlow()
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    private val _isBankSyncing = MutableStateFlow(false)
-    val isBankSyncing: StateFlow<Boolean> = _isBankSyncing.asStateFlow()
+    private val _selectedCategory = MutableStateFlow("All")
+    val selectedCategory: StateFlow<String> = _selectedCategory.asStateFlow()
 
-    // --- Security PIN & 2FA Gatekeeping ---
-    private val _isAppLocked = MutableStateFlow(false)
-    val isAppLocked: StateFlow<Boolean> = _isAppLocked.asStateFlow()
+    private val _selectedLocation = MutableStateFlow("All")
+    val selectedLocation: StateFlow<String> = _selectedLocation.asStateFlow()
 
-    private val _pinBuffer = MutableStateFlow("")
-    val pinBuffer: StateFlow<String> = _pinBuffer.asStateFlow()
+    private val _selectedProduct = MutableStateFlow<Product?>(null)
+    val selectedProduct: StateFlow<Product?> = _selectedProduct.asStateFlow()
 
-    private val _securityMessage = MutableStateFlow("")
-    val securityMessage: StateFlow<String> = _securityMessage.asStateFlow()
+    // --- Chat Active Room States ---
+    private val _activeChatProductId = MutableStateFlow<Int?>(null)
+    val activeChatProductId: StateFlow<Int?> = _activeChatProductId.asStateFlow()
 
-    private val _otpChallengeCode = MutableStateFlow("")
-    val otpChallengeCode: StateFlow<String> = _otpChallengeCode.asStateFlow()
+    private val _isOfflineMode = MutableStateFlow(false)
+    val isOfflineMode: StateFlow<Boolean> = _isOfflineMode.asStateFlow()
 
-    private val _isTwoFactorVerifying = MutableStateFlow(false)
-    val isTwoFactorVerifying: StateFlow<Boolean> = _isTwoFactorVerifying.asStateFlow()
+    private val _isSyncingMessages = MutableStateFlow(false)
+    val isSyncingMessages: StateFlow<Boolean> = _isSyncingMessages.asStateFlow()
 
-    // --- AI Automated Categorization & Insights ---
-    private val _isAICategorizing = MutableStateFlow(false)
-    val isAICategorizing: StateFlow<Boolean> = _isAICategorizing.asStateFlow()
+    // --- Gemini Support States ---
+    private val _isGeneratingDescription = MutableStateFlow(false)
+    val isGeneratingDescription: StateFlow<Boolean> = _isGeneratingDescription.asStateFlow()
 
-    private val _aiInsights = MutableStateFlow<String?>(null)
-    val aiInsights: StateFlow<String?> = _aiInsights.asStateFlow()
+    private val _generatedDescription = MutableStateFlow("")
+    val generatedDescription: StateFlow<String> = _generatedDescription.asStateFlow()
 
-    private val _isInsightsLoading = MutableStateFlow(false)
-    val isInsightsLoading: StateFlow<Boolean> = _isInsightsLoading.asStateFlow()
+    // --- Checkout & Payment States ---
+    private val _activePaymentProduct = MutableStateFlow<Product?>(null)
+    val activePaymentProduct: StateFlow<Product?> = _activePaymentProduct.asStateFlow()
 
-    // --- Offline Cloud Sync State ---
-    private val _isCloudSyncing = MutableStateFlow(false)
-    val isCloudSyncing: StateFlow<Boolean> = _isCloudSyncing.asStateFlow()
+    private val _paymentProcessing = MutableStateFlow(false)
+    val paymentProcessing: StateFlow<Boolean> = _paymentProcessing.asStateFlow()
 
     init {
         viewModelScope.launch {
-            repository.prepopulateDefaultCategories()
-            repository.prepopulateInitialTransactions()
-            repository.prepopulateInitialBills()
+            repository.prepopulateInitialProducts()
             
-            // Check if PIN lock is enabled on startup
-            securityConfig.collect { config ->
-                if (config != null && config.isPinEnabled && config.hashedPin.isNotEmpty()) {
-                    _isAppLocked.value = true
-                }
-            }
+            // Set up a pre-configured active session so user sees a clean state immediately,
+            // but can log out and log in with phone / email / Gmail.
+            val salagaOwner = User(
+                id = "salaga_store",
+                name = "Yaro Salaga Store",
+                contactMethod = "Google",
+                phoneNumber = "+233 24 123 4567",
+                email = "salagahub@gmail.com",
+                location = "Salaga, Savannah",
+                momoNumber = "0241234567",
+                momoCarrier = "MTN MoMo",
+                isVerified = true,
+                verificationType = "Ghana Card"
+            )
+            repository.insertUser(salagaOwner)
+
+            // Current logged-in user
+            val defaultBuyer = User(
+                id = "ghana_buyer",
+                name = "Kwame Mensah",
+                contactMethod = "Phone",
+                phoneNumber = "+233 55 987 6543",
+                email = "kwame@ghanamail.com",
+                location = "Accra, Greater Accra",
+                momoNumber = "0559876543",
+                momoCarrier = "MTN MoMo",
+                isVerified = false,
+                verificationType = "None"
+            )
+            repository.insertUser(defaultBuyer)
+            _currentUser.value = defaultBuyer
         }
     }
 
+    // --- Tab Controllers ---
     fun selectTab(tab: String) {
         _currentTab.value = tab
     }
 
-    // --- Bank Sync Engine Implementation ---
-    fun toggleLinkAccount(accountName: String) {
-        val updated = _linkedAccounts.value.map { acc ->
-            if (acc.name == accountName) {
-                acc.copy(isLinked = !acc.isLinked, lastSynced = if (!acc.isLinked) System.currentTimeMillis() else 0L)
-            } else acc
-        }
-        _linkedAccounts.value = updated
-    }
-
-    fun syncBankAccounts() {
-        if (_isBankSyncing.value) return
-        viewModelScope.launch {
-            _isBankSyncing.value = true
-            delay(2500) // Realistic interactive delay of bank retrieval
-            
-            val linked = _linkedAccounts.value.filter { it.isLinked }
-            if (linked.isNotEmpty()) {
-                val now = System.currentTimeMillis()
-                // Retrieve 2 simulated synced transactions
-                val syncTx1 = Transaction(
-                    amount = -42.80,
-                    description = "Whole Foods Markets",
-                    category = "Food & Dining",
-                    date = now,
-                    bankAccountName = linked.random().name,
-                    isPending = false
-                )
-                val syncTx2 = Transaction(
-                    amount = -18.00,
-                    description = "Uber Ride",
-                    category = "Transport & Gas",
-                    date = now - 1500000,
-                    bankAccountName = linked.random().name,
-                    isPending = false
-                )
-                
-                repository.insertTransaction(syncTx1)
-                repository.insertTransaction(syncTx2)
-                
-                // Adjust linked balances
-                _linkedAccounts.value = _linkedAccounts.value.map { acc ->
-                    if (acc.isLinked) {
-                        val adjustment = if (acc.name == syncTx1.bankAccountName) syncTx1.amount else 0.0 +
-                                         if (acc.name == syncTx2.bankAccountName) syncTx2.amount else 0.0
-                        acc.copy(balance = acc.balance + adjustment, lastSynced = now)
-                    } else acc
-                }
-            }
-            _isBankSyncing.value = false
+    fun selectProduct(product: Product?) {
+        _selectedProduct.value = product
+        if (product != null) {
+            _activeChatProductId.value = product.id
         }
     }
 
-    // --- UI Dialog Closures ---
-    fun addManualTransaction(amount: Double, description: String, category: String, account: String, isRecurring: Boolean) {
-        viewModelScope.launch {
-            val tx = Transaction(
-                amount = amount,
-                description = description,
-                category = category,
-                date = System.currentTimeMillis(),
-                bankAccountName = account,
-                isRecurring = isRecurring,
-                isPending = false
-            )
-            repository.insertTransaction(tx)
-            
-            // Adjust balance in account check
-            _linkedAccounts.value = _linkedAccounts.value.map { acc ->
-                if (acc.name == account) {
-                    acc.copy(balance = acc.balance + amount)
-                } else acc
-            }
-        }
+    fun startChatWithProduct(product: Product) {
+        _selectedProduct.value = product
+        _activeChatProductId.value = product.id
+        _currentTab.value = "Chat"
     }
 
-    fun deleteTransaction(transaction: Transaction) {
-        viewModelScope.launch {
-            repository.deleteTransaction(transaction)
-            // Restore balance
-            _linkedAccounts.value = _linkedAccounts.value.map { acc ->
-                if (acc.name == transaction.bankAccountName) {
-                    acc.copy(balance = acc.balance - transaction.amount)
-                } else acc
-            }
-        }
+    fun startNewListing() {
+        _generatedDescription.value = ""
+        _currentTab.value = "Sell"
     }
 
-    fun addCustomCategory(name: String, iconName: String, colorHex: String) {
-        viewModelScope.launch {
-            val cat = CustomCategory(name = name, iconName = iconName, colorHex = colorHex)
-            repository.insertCategory(cat)
-        }
+    // --- Filtering Logic ---
+    fun updateSearchQuery(query: String) {
+        _searchQuery.value = query
     }
 
-    fun addRecurringReminder(title: String, amount: Double, category: String, frequency: String, dueInDays: Int) {
+    fun updateCategory(category: String) {
+        _selectedCategory.value = category
+    }
+
+    fun updateLocation(location: String) {
+        _selectedLocation.value = location
+    }
+
+    // --- Seller Operations ---
+    fun postProduct(
+        title: String,
+        description: String,
+        price: Double,
+        category: String,
+        location: String,
+        acceptsMoMo: Boolean,
+        acceptsCard: Boolean,
+        momoNumber: String,
+        momoCarrier: String,
+        extraImageIds: String
+    ) {
+        val user = _currentUser.value ?: return
         viewModelScope.launch {
-            val dueDate = System.currentTimeMillis() + (dueInDays * 24 * 60 * 60 * 1000L)
-            val reminder = RecurringReminder(
+            val product = Product(
                 title = title,
-                amount = amount,
+                description = description,
+                price = price,
                 category = category,
-                frequency = frequency,
-                nextDueDate = dueDate
+                location = location,
+                sellerId = user.id,
+                sellerName = user.name,
+                sellerPhone = user.phoneNumber.ifEmpty { "+233 24 000 0000" },
+                sellerEmail = user.email,
+                isSold = false,
+                isPremium = false,
+                imageId = (1..6).random(),
+                extraImageIds = extraImageIds,
+                acceptsMoMo = acceptsMoMo,
+                acceptsCard = acceptsCard,
+                momoNumber = momoNumber,
+                momoCarrier = momoCarrier,
+                isSellerVerified = user.isVerified,
+                sellerVerificationBadge = if (user.isVerified) user.verificationType else "Self-Declared Account"
             )
-            repository.insertReminder(reminder)
+            repository.insertProduct(product)
+            _currentTab.value = "Browse"
         }
     }
 
-    fun deleteReminder(reminder: RecurringReminder) {
+    fun promoteProduct(product: Product) {
         viewModelScope.launch {
-            repository.deleteReminder(reminder)
+            val updated = product.copy(isPremium = true)
+            repository.updateProduct(updated)
+            if (_selectedProduct.value?.id == product.id) {
+                _selectedProduct.value = updated
+            }
         }
     }
 
-    fun addBill(payee: String, amount: Double, dueDate: Long, category: String, reminderDaysBefore: Int, notes: String = "") {
+    fun markProductAsSold(product: Product) {
         viewModelScope.launch {
-            val bill = Bill(
-                payee = payee,
-                amount = amount,
-                dueDate = dueDate,
-                category = category,
-                reminderDaysBefore = reminderDaysBefore,
-                isPaid = false,
-                notes = notes
+            val updated = product.copy(isSold = true)
+            repository.updateProduct(updated)
+            if (_selectedProduct.value?.id == product.id) {
+                _selectedProduct.value = updated
+            }
+        }
+    }
+
+    fun deleteProduct(product: Product) {
+        viewModelScope.launch {
+            repository.deleteProduct(product)
+            _selectedProduct.value = null
+        }
+    }
+
+    // --- Authentication Operations ---
+    fun loginOrSignUp(name: String, identifier: String, method: String, phoneVal: String = "", emailVal: String = "") {
+        if (name.trim().isEmpty() || identifier.trim().isEmpty()) {
+            _authError.value = "Name and login ID details cannot be blank."
+            return
+        }
+        viewModelScope.launch {
+            val user = User(
+                id = identifier.trim(),
+                name = name.trim(),
+                contactMethod = method,
+                phoneNumber = if (method == "Phone") identifier else phoneVal,
+                email = if (method == "Email" || method == "Google") identifier else emailVal,
+                location = "Salaga, Savannah"
             )
-            repository.insertBill(bill)
+            repository.insertUser(user)
+            _currentUser.value = user
+            _authError.value = null
         }
     }
 
-    fun deleteBill(bill: Bill) {
-        viewModelScope.launch {
-            repository.deleteBill(bill)
-        }
+    fun logout() {
+        _currentUser.value = null
+        _currentTab.value = "Browse"
     }
 
-    fun toggleBillPaid(bill: Bill) {
+    fun verifyUser(idType: String) {
+        val user = _currentUser.value ?: return
         viewModelScope.launch {
-            val updated = bill.copy(isPaid = !bill.isPaid)
-            repository.insertBill(updated)
-            
-            // Generate automatic payment transaction when marked as paid
-            if (updated.isPaid) {
-                val account = _linkedAccounts.value.firstOrNull { it.isLinked }?.name ?: "Manual"
-                val tx = Transaction(
-                    amount = -updated.amount, // negative for expense
-                    description = "Bill Paid: ${updated.payee}",
-                    category = updated.category,
-                    date = System.currentTimeMillis(),
-                    bankAccountName = account,
-                    isRecurring = true,
-                    isPending = false
+            val isVerifiedVal = idType != "None"
+            val updated = user.copy(
+                isVerified = isVerifiedVal,
+                verificationType = if (isVerifiedVal) idType else ""
+            )
+            repository.insertUser(updated)
+            _currentUser.value = updated
+
+            // Update all outstanding listings belonging to this seller
+            val list = products.value.filter { it.sellerId == user.id }
+            list.forEach { prod ->
+                val updatedProd = prod.copy(
+                    isSellerVerified = isVerifiedVal,
+                    sellerVerificationBadge = if (isVerifiedVal) idType else ""
                 )
-                repository.insertTransaction(tx)
-                
-                // Adjust account bank balance
-                _linkedAccounts.value = _linkedAccounts.value.map { acc ->
-                    if (acc.name == account) {
-                        acc.copy(balance = acc.balance - updated.amount)
-                    } else acc
-                }
+                repository.updateProduct(updatedProd)
             }
         }
     }
 
-    // --- Automated Gemini Categorization ---
-    fun getAISuggestedCategory(description: String, callback: (String) -> Unit) {
-        if (description.trim().isEmpty()) return
+    fun submitReview(sellerId: String, rating: Int, reviewText: String) {
+        val user = _currentUser.value ?: return
         viewModelScope.launch {
-            _isAICategorizing.value = true
-            val cats = categories.value.map { it.name }
-            val suggested = geminiService.getCategorization(description, cats)
-            callback(suggested)
-            _isAICategorizing.value = false
-        }
-    }
-
-    // --- Visual Spending Trend Analysis ---
-    fun triggerAIInsights() {
-        if (_isInsightsLoading.value) return
-        viewModelScope.launch {
-            _isInsightsLoading.value = true
-            val insightsText = geminiService.getFinancialInsights(transactions.value, categories.value)
-            _aiInsights.value = insightsText
-            _isInsightsLoading.value = false
-        }
-    }
-
-    // --- Export Reports in CSV ---
-    fun exportToCSV(context: Context): Uri? {
-        val txList = transactions.value
-        if (txList.isEmpty()) return null
-        return try {
-            val csvBuilder = StringBuilder()
-            csvBuilder.append("ID,Date,Description,Amount,Category,Account,Recurring\n")
-            
-            val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-            for (tx in txList) {
-                val formattedDate = dateFormat.format(Date(tx.date))
-                val escapesDesc = tx.description.replace("\"", "\"\"")
-                csvBuilder.append("${tx.id},$formattedDate,\"$escapesDesc\",${tx.amount},\"${tx.category}\",\"${tx.bankAccountName}\",${tx.isRecurring}\n")
-            }
-            
-            val outputDirectory = File(context.cacheDir, "csv_exports")
-            if (!outputDirectory.exists()) {
-                outputDirectory.mkdirs()
-            }
-            val reportFile = File(outputDirectory, "apex_ledger_report_${System.currentTimeMillis() / 1000}.csv")
-            reportFile.writeText(csvBuilder.toString())
-            
-            FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                reportFile
+            val review = SellerReview(
+                sellerId = sellerId,
+                buyerId = user.id,
+                buyerName = user.name.ifEmpty { "Anonymous Buyer" },
+                rating = rating,
+                reviewText = reviewText
             )
-        } catch (e: Exception) {
-            null
+            repository.insertReview(review)
         }
     }
 
-    // --- SECURE Lock & 2FA Setup Functions ---
-    fun handlePINKey(key: String, onPINValidated: () -> Unit = {}) {
-        val currentBuf = _pinBuffer.value
-        if (key == "C") {
-            _pinBuffer.value = ""
+    // --- Chat P2P Operations ---
+    fun setOfflineMode(enabled: Boolean) {
+        _isOfflineMode.value = enabled
+        if (!enabled) {
+            syncOfflineMessages()
+        }
+    }
+
+    fun syncOfflineMessages() {
+        val user = _currentUser.value ?: return
+        viewModelScope.launch {
+            val pending = allMessages.value.filter { it.status == "PENDING" && it.senderId == user.id }
+            if (pending.isEmpty()) return@launch
+
+            _isSyncingMessages.value = true
+            delay(1200) // Realistic syncing simulator delay
+
+            pending.forEach { msg ->
+                val updatedMsg = msg.copy(status = "SENT")
+                repository.insertMessage(updatedMsg)
+                simulateSellerResponse(msg.productId, msg.messageText)
+            }
+            _isSyncingMessages.value = false
+        }
+    }
+
+    fun sendChatMessage(productId: Int, messageText: String) {
+        val user = _currentUser.value ?: return
+        val items = products.value
+        val product = items.find { it.id == productId } ?: return
+
+        viewModelScope.launch {
+            val stat = if (_isOfflineMode.value) "PENDING" else "SENT"
+            // Sender is Current User, recipient is Product Seller
+            val firstMsg = ChatMessage(
+                productId = productId,
+                productTitle = product.title,
+                senderId = user.id,
+                senderName = user.name,
+                recipientId = product.sellerId,
+                recipientName = product.sellerName,
+                messageText = messageText,
+                status = stat
+            )
+            repository.insertMessage(firstMsg)
+
+            if (!_isOfflineMode.value) {
+                simulateSellerResponse(productId, messageText)
+            }
+        }
+    }
+
+    private suspend fun simulateSellerResponse(productId: Int, messageText: String) {
+        val user = _currentUser.value ?: return
+        val items = products.value
+        val product = items.find { it.id == productId } ?: return
+
+        // Trigger a realistic Ghanaian seller P2P automated negotiation responder!
+        delay(1500)
+        val responseString = when {
+            messageText.lowercase().contains("last price") || messageText.lowercase().contains("discount") -> {
+                "Hello ${user.name}, for this beautiful ${product.title}, the last price I can do is ${"%.2f".format(product.price * 0.9)} GHS. Where are you located so we can arrange delivery?"
+            }
+            messageText.lowercase().contains("momo") || messageText.lowercase().contains("payment") -> {
+                "Yes, you can pay directly. I accept ${product.momoCarrier} on ${product.momoNumber.ifEmpty { "my phone" }}. Or you can pay securely with standard card in the app!"
+            }
+            messageText.lowercase().contains("salaga") || messageText.lowercase().contains("where") -> {
+                "I am currently located in ${product.location}. You can visit my store directly or we can do MTN Mobile Money then I send it via bus / transport driver."
+            }
+            else -> {
+                "Aaafandey! Thanks for your message about ${product.title}. Yes, it is still fully available. When are you ready to pick it up? You can reach me on ${product.sellerPhone}."
+            }
+        }
+
+        val replyMsg = ChatMessage(
+            productId = productId,
+            productTitle = product.title,
+            senderId = product.sellerId,
+            senderName = product.sellerName,
+            recipientId = user.id,
+            recipientName = user.name,
+            messageText = responseString,
+            status = "SENT"
+        )
+        repository.insertMessage(replyMsg)
+    }
+
+    // --- Payment Checkout Operations (Mobile Money & Bank Cards) ---
+    fun initiateCheckout(product: Product) {
+        _activePaymentProduct.value = product
+    }
+
+    fun cancelCheckout() {
+        _activePaymentProduct.value = null
+    }
+
+    fun processPayment(
+        product: Product,
+        buyerName: String,
+        buyerContact: String,
+        paymentMethod: String // "MTN MoMo", "Telecel Cash", "AT Money", "Visa/MasterCard"
+    ) {
+        viewModelScope.launch {
+            _paymentProcessing.value = true
+            delay(2500) // simulator lag for processing
+
+            val txRef = "TXN-" + UUID.randomUUID().toString().take(8).uppercase()
+            val receipt = PaymentReceipt(
+                productId = product.id,
+                productTitle = product.title,
+                amountPaid = product.price,
+                buyerName = buyerName,
+                buyerContact = buyerContact,
+                paymentMethod = paymentMethod,
+                transactionRef = txRef
+            )
+            repository.insertReceipt(receipt)
+            
+            // Mark the product as sold
+            val updated = product.copy(isSold = true)
+            repository.updateProduct(updated)
+            if (_selectedProduct.value?.id == product.id) {
+                _selectedProduct.value = updated
+            }
+
+            _activePaymentProduct.value = null
+            _paymentProcessing.value = false
+            _currentTab.value = "Receipts"
+        }
+    }
+
+    // --- Gemini Support Action ---
+    fun generateListingAI(title: String, category: String, location: String, points: String) {
+        if (title.isBlank()) {
+            _generatedDescription.value = "Please input a title first before requesting AI assistant help."
             return
         }
-        if (key == "⌫") {
-            if (currentBuf.isNotEmpty()) {
-                _pinBuffer.value = currentBuf.substring(0, currentBuf.length -1)
-            }
-            return
-        }
-        if (currentBuf.length < 4) {
-            val newBuf = currentBuf + key
-            _pinBuffer.value = newBuf
-            
-            if (newBuf.length == 4) {
-                // Perform check or confirmation
-                viewModelScope.launch {
-                    val config = securityConfig.value
-                    if (config != null && config.isPinEnabled && config.hashedPin.isNotEmpty()) {
-                        // Unlocking app
-                        if (config.hashedPin == newBuf) {
-                            _isAppLocked.value = false
-                            _pinBuffer.value = ""
-                            _securityMessage.value = "Welcome back!"
-                            onPINValidated()
-                        } else {
-                            _pinBuffer.value = ""
-                            _securityMessage.value = "Incorrect PIN code. Privacy protection active."
-                        }
-                    } else {
-                        // Creating PIN (first run)
-                        // Directly assign and save
-                        val newConfig = (config ?: SecurityConfig()).copy(
-                            isPinEnabled = true,
-                            hashedPin = newBuf
-                        )
-                        repository.updateSecurityConfig(newConfig)
-                        _pinBuffer.value = ""
-                        _securityMessage.value = "Security PIN configured successfully!"
-                    }
-                }
-            }
-        }
-    }
-
-    fun disablePIN() {
         viewModelScope.launch {
-            val current = securityConfig.value ?: SecurityConfig()
-            val updated = current.copy(isPinEnabled = false, hashedPin = "")
-            repository.updateSecurityConfig(updated)
-            _securityMessage.value = "Privacy lock PIN disabled."
-        }
-    }
-
-    fun toggleTwoFactor(enabled: Boolean, email: String) {
-        viewModelScope.launch {
-            if (enabled) {
-                // Generate simulated code
-                val randomOtp = (100000..999999).random().toString()
-                _otpChallengeCode.value = randomOtp
-                _isTwoFactorVerifying.value = true
-                _securityMessage.value = "Verification code requested for 2FA confirmation."
-            } else {
-                val current = securityConfig.value ?: SecurityConfig()
-                val updated = current.copy(isTwoFactorEnabled = false)
-                repository.updateSecurityConfig(updated)
-                _securityMessage.value = "Secure two-factor disabled."
-            }
-        }
-    }
-
-    fun verifySimulatedOTP(codeInput: String): Boolean {
-        if (codeInput == _otpChallengeCode.value) {
-            viewModelScope.launch {
-                val current = securityConfig.value ?: SecurityConfig()
-                val updated = current.copy(isTwoFactorEnabled = true)
-                repository.updateSecurityConfig(updated)
-                _isTwoFactorVerifying.value = false
-                _otpChallengeCode.value = ""
-                _securityMessage.value = "Encrypted Two-Factor authentication is now active!"
-            }
-            return true
-        } else {
-            _securityMessage.value = "Invalid security code. Please check code and retry."
-            return false
-        }
-    }
-
-    fun cancelOTPVerification() {
-        _isTwoFactorVerifying.value = false
-        _otpChallengeCode.value = ""
-    }
-
-    // --- Secure Cloud Synced Engine ---
-    fun triggerSecureCloudSync() {
-        if (_isCloudSyncing.value) return
-        viewModelScope.launch {
-            _isCloudSyncing.value = true
-            _securityMessage.value = "Establishing AES-256 cloud tunnel..."
-            delay(1500)
-            _securityMessage.value = "Synchronizing encrypted records offline -> cloud vaults..."
-            delay(1500)
-            
-            val current = securityConfig.value ?: SecurityConfig()
-            val updated = current.copy(
-                isCloudSyncEnabled = true,
-                lastSyncTimestamp = System.currentTimeMillis()
+            _isGeneratingDescription.value = true
+            val desc = geminiService.generateProductDescription(
+                title = title,
+                category = category,
+                location = location,
+                details = points
             )
-            repository.updateSecurityConfig(updated)
-            _securityMessage.value = "Total Privacy Sync Completed successfully!"
-            _isCloudSyncing.value = false
-        }
-    }
-
-    fun lockApp() {
-        val config = securityConfig.value
-        if (config != null && config.isPinEnabled && config.hashedPin.isNotEmpty()) {
-            _isAppLocked.value = true
-            _securityMessage.value = "Encrypted privacy shield activated!"
-        } else {
-            _securityMessage.value = "Setup a secure device PIN lock in the Security tab first!"
+            _generatedDescription.value = desc
+            _isGeneratingDescription.value = false
         }
     }
 }
-
-// Support classes
-data class BankAccount(
-    val name: String,
-    val type: String,
-    val balance: Double,
-    val isLinked: Boolean,
-    val lastSynced: Long
-)
